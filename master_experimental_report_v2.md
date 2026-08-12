@@ -80,7 +80,8 @@ The report scalar `paper_cost = total_distance + charging_time + 0.25*waiting_ti
 | NFC | Nonlinear | Full | segmented SOC charge to battery capacity |
 | NPC | Nonlinear | Partial | segmented SOC charge to required energy plus safety margin |
 
-![Charging mechanism](../results/paper_figures_v2/A2_charging_mechanism.png)
+<img width="1574" height="753" alt="A2_charging_mechanism" src="https://github.com/user-attachments/assets/99b4d81a-149e-44a7-96a5-fad3a452bddc" />
+
 
 ## 8. Unified Computational Framework
 
@@ -170,9 +171,10 @@ All final methods produce a shared solution schema and pass through the same sim
 | GA | 36 | 66.667 | 7.666667 | 906.231298 | 804.239413 | 101.991886 | 379.337941 | 170.940348 | 683.615107 | 1262.172734 | 76.122086 | 10922.699444 |
 | Hybrid | 36 | 72.222 | 7.884615 | 891.437547 | 786.474962 | 104.962585 | 362.986364 | 156.253175 | 684.790325 | 1232.753151 | 63.404685 | 73.821376 |
 
-![Paper cost distribution](../results/paper_figures_v2/D1_paper_cost_distribution.png)
+<img width="1232" height="781" alt="D1_paper_cost_distribution" src="https://github.com/user-attachments/assets/a526d30d-0edd-4683-9770-e8cb39ae7004" />
 
-![Vehicle-distance trade-off](../results/paper_figures_v2/D2_vehicle_count_vs_total_distance.png)
+<img width="1232" height="821" alt="D2_vehicle_count_vs_total_distance" src="https://github.com/user-attachments/assets/9fa7613d-074a-4e07-84e3-c9db04504f3b" />
+
 
 ## 19. RQ3 Instance Sensitivity
 
@@ -188,7 +190,8 @@ All final methods produce a shared solution schema and pass through the same sim
 | RC101 | GA | 12 | 100.0 | 7.916667 | 929.110956 | 1177.222078 | 149.476907 |
 | RC101 | Hybrid | 12 | 100.0 | 7.916667 | 890.057783 | 1135.608391 | 61.044957 |
 
-![Instance heatmap](../results/paper_figures_v2/C2_method_instance_feasibility_heatmap.png)
+<img width="961" height="747" alt="C2_method_instance_feasibility_heatmap" src="https://github.com/user-attachments/assets/fd803ed0-923b-4691-8c38-7bfadaf2b3cf" />
+
 
 ## 20. RQ4 Charging Policy Analysis
 
@@ -207,7 +210,8 @@ All final methods produce a shared solution schema and pass through the same sim
 | NPC | Nonlinear / Partial | GA | 9 | 66.667 | 124.415843 | 374.536061 | 925.764491 | 1214.350464 | 74.620886 |
 | NPC | Nonlinear / Partial | Hybrid | 9 | 77.778 | 101.119031 | 345.044777 | 896.349772 | 1183.215746 | 62.474142 |
 
-![Charging policy impact](../results/paper_figures_v2/F1_charging_policy_2x2.png)
+<img width="1249" height="781" alt="F1_charging_policy_2x2" src="https://github.com/user-attachments/assets/60304f1c-8de1-472d-adeb-75b6027e4f0f" />
+
 
 ## 21. RQ5 Hybrid Effectiveness
 
@@ -233,9 +237,11 @@ All final methods produce a shared solution schema and pass through the same sim
 
 Hybrid is useful when diverse GA candidates give ALNS a refinable structure. It fails when refinement increases vehicles, remains infeasible, or does not improve the selected ranking. This is a negative result to preserve, not hide.
 
-![Hybrid WTL](../results/paper_figures_v2/E1_hybrid_win_tie_loss.png)
+<img width="1299" height="720" alt="E1_hybrid_win_tie_loss" src="https://github.com/user-attachments/assets/b58f849f-d69b-47a7-8ce7-cfdd0f3c6b3c" />
 
-![Hybrid paired delta](../results/paper_figures_v2/E2_paired_delta_paper_cost.png)
+
+<img width="1204" height="730" alt="E2_paired_delta_paper_cost" src="https://github.com/user-attachments/assets/a22659ae-a968-41cc-9220-01992d50749f" />
+
 
 ## 22. RQ6 Computational Robustness
 
@@ -256,9 +262,11 @@ Hybrid is useful when diverse GA candidates give ALNS a refinable structure. It 
 
 Observed evidence is limited to saved runtime fields. Without profiling, runtime causes remain plausible mechanisms rather than confirmed causes.
 
-![Runtime boxplot](../results/paper_figures_v2/H1_runtime_log_boxplot.png)
+<img width="1177" height="781" alt="H1_runtime_log_boxplot" src="https://github.com/user-attachments/assets/ac0254f9-0458-44cc-9d0c-e28b140eaa4d" />
 
-![Runtime ECDF](../results/paper_figures_v2/H2_runtime_ecdf.png)
+
+<img width="1172" height="823" alt="H2_runtime_ecdf" src="https://github.com/user-attachments/assets/2a056522-3edf-4b1c-963c-1080412012c0" />
+
 
 ## 23. ALNS Operator Analysis
 
@@ -300,7 +308,8 @@ Observed evidence is limited to saved runtime fields. Without profiling, runtime
 | R-SweepInsertion | repair | 1215 | 690 | 18 | 0.567901 | 0.014815 | 0.498411 | High-frequency / high-value |
 | R-ChargingAwareV2 | repair | 194 | 153 | 0 | 0.78866 | 0.0 | 0.016265 | Low-frequency / low-value |
 
-![ALNS operator effectiveness](../results/paper_figures_v2/G1_alns_operator_effectiveness_bubble.png)
+<img width="1465" height="959" alt="G1_alns_operator_effectiveness_bubble" src="https://github.com/user-attachments/assets/b4e51e03-7526-4c21-b206-a79fc6da6744" />
+
 
 ## 24. Supporting 5/10-Customer Experiments
 
@@ -314,7 +323,8 @@ OR-Tools and PyVRP are truck-only references and are not directly comparable aga
 
 Representative route uses saved raw result: instance=RC101_25_seed128_td, method=hybrid_diverse_topk, policy=LFC, vehicle_count=8, drone_tasks=1.
 
-![Representative Hybrid solution](../results/paper_figures_v2/I1_representative_hybrid_solution.png)
+<img width="1258" height="1233" alt="I1_representative_hybrid_solution" src="https://github.com/user-attachments/assets/7ab9b059-95df-4e30-9914-c9c115d26a9b" />
+
 
 ## 27. Negative Results and Failure Analysis
 
