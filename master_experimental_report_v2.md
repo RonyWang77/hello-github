@@ -37,7 +37,8 @@ Solomon VRPTW motivates C/R/RC time-window benchmarks [Solomon1987, REFERENCE NE
 
 The complexity chain is VRP -> VRPTW -> EVRPTW -> Truck-Drone Routing -> Energy-constrained Truck-Drone Routing -> Nonlinear/Partial Charging -> Truck-Drone EVRPTW-NL. Each step adds decisions and hard constraints: customer sequence, service timing, battery state, station visits, service assignment, launch/recovery, synchronization, charging amount, and SOC-dependent charging time. These decisions are coupled, so a route change can affect time windows, energy feasibility, drone synchronization, and charging time at the same time.
 
-![Problem schematic](../results/paper_figures_v2/A1_problem_schematic.png)
+<img width="1428" height="806" alt="A1_problem_schematic" src="https://github.com/user-attachments/assets/b10b7ff5-ca52-44c9-a6a4-068a4600b53c" />
+
 
 ## 5. Source Problem Evolution
 
