@@ -1,341 +1,150 @@
-# Master Experimental Report V2 Deep Argumentation Edition
+# Master Experimental Report V2 Deep Integrated Edition: Truck-Drone EVRPTW-NL
 
-> This edition preserves the V2 structure and statistics, but expands the causal argumentation. It does not rerun solvers or modify algorithms. It integrates development logs, supporting experiments, diagnostics, and the final 108-run matrix.
-
-## How To Read This Deep Edition
-
-Evidence is separated into **final controlled evidence** and **developmental evidence**. Final controlled evidence comes from the 25-customer 108-run matrix and is used for final performance claims. Developmental evidence comes from logs, stage reports, small runs, smoke tests, and diagnostics; it explains why the algorithms evolved, but is not treated as strict controlled ablation.
-
-## Development Evidence Matrix
-
-Full CSV: `results/paper_analysis_v2/development_evidence_matrix.csv`.
-
-| Stage | Method | Observed problem | Hypothesis | Modification | Before result | After result | Interpretation | Final status |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| GA Stage 0 | GA | Customer-order-only encoding could not express truck/drone assignment, launch/recovery, charging, or multi-vehicle structure. | A richer solution representation is required before GA can search the final Truck-Drone EVRPTW-NL space. | Move from simple customer_order to structured solution with truck_routes, drone_tasks, charging_plan. | Early GA produced infeasible cases; time-window feasibility was reported around 20-40% in user-provided diagnostics. | Later GA output could represent multi-route truck-drone charging-capable solutions. | The bottleneck was not just search quality; it was missing expressiveness. | Superseded by final structured GA |
-| GA Stage 1-3 | GA | Drone tasks were decorative when limited to single-customer missions without station visits. | Allowing multi-customer drone_route and drone charging should make drone service a real routing decision. | Upgrade drone task to route_index + launch + drone_route + recover + customers; allow station nodes and charging_plan vehicle='drone'. | Single-customer sortie could not express realistic drone contribution. | Final raw results contain drone_tasks and truck/drone distances in 25-customer solutions. | Problem complexity expansion and algorithm search had to evolve together. | Retained in final method |
-| GA Stage 4-8 | GA | Multi-customer drone and charging search created a large candidate space and could threaten runtime. | Hierarchical pruning, evaluation cache, route rebalance, specialized mutation, route split, and diversity anchors can keep GA usable at 25/50 customers. | Add layered drone search, caching, Truck-Drone mutations, incremental vehicle expansion, route-preserving crossover, and time budget. | Unbounded drone construction risked slow or infeasible outputs. | GA development report states GA can generate feasible 25/50-customer solutions, but remains conservative. | GA became a strong feasible constructor rather than a pure optimizer. | Retained in final GA |
-| ALNS Phase 1 | ALNS | Initial ALNS scaffold was not a real independent ALNS; it could not explain destroy/repair/local operator effects. | An explicit ALNSState and independent initial construction can make ALNS a fair standalone comparison method. | Add ALNSState, initial solution, D-Random/D-WorstTime/D-RouteRemoval/D-DroneTask, R-Regret/TW/Energy/Drone, and local operators. | Scaffold behavior was not comparable to final GA. | R101-5 True, 3 vehicles, distance 161.151, runtime 0.845s; R101-10 True, 3 vehicles, distance 240.500, runtime 5.497s; C101-5 and RC101-5 also True. | Independence was established before quality optimization. | Modified later |
-| ALNS layered/petal/post-stage | ALNS | ALNS was feasible but conservative; full evaluator calls and many weak operators increased runtime. | Layered candidate evaluation and targeted operators can improve distance, crossing, drone, charging, and vehicle behavior without uncontrolled runtime. | Add route merge V2, crossing removal, drone rebuild, charging cleanup, vehicle reduction, spatial/petal metrics, and quick/local/full evaluation layers. | R101-25 alns_core True, 9 vehicles, distance 710.524, runtime 47.507s, evaluator calls 965. | Later R101-25 alns_core True, 9 vehicles, distance 643.225, runtime 45.195s, crossing successes 7; post-stage alns_full True, 10 vehicles, distance 780.638, drone tasks 4 in one snapshot. | The ALNS search landscape is operator-sensitive and not monotonic. | Retained in final ALNS with limitations |
-| Hybrid Stage 1 | Hybrid | Simple GA best -> ALNS refine often failed to improve final accepted solution. | GA global search plus ALNS local refinement should be complementary. | Implement single-best post-processing from GA solution to ALNS state. | No true integration; selector simply chose GA or ALNS. | R101-5 retained GA because ALNS used more vehicles; R101-10 ALNS refine replaced GA with improvement_percentage about 0.64%; R101-25 retained GA because ALNS distance was shorter but vehicles higher. | Complementarity existed only under the ranking rule. | Superseded by Top-K |
-| Hybrid Stage 2-2.5 | Hybrid | GA rank-1 was not always the best ALNS starting point; ALNS could reduce distance by adding vehicles. | Diverse Top-K plus vehicle-preserving refinement improves robustness. | select_diverse_top_k and preserve_vehicle_count. | Single-best refine was blocked by vehicle increases. | R101-10 Top-K selected rank 3 GA candidate; R101-25 Top-K selected rank 3; preserve kept R101-5 and R101-25 vehicle counts while accepting same-vehicle improvement on R101-10. | Hybrid needs both diversity and aligned objective rules. | Retained in final Hybrid logic |
-| Hybrid Stage 3-6 | Hybrid | Post-processing might be too late, but fixed ALNS triggering did not guarantee injection. | Periodic/stagnation ALNS and hybrid-local operators can inject improvements during candidate evolution. | Periodic elite improvement, stagnation-triggered ALNS, H-local operators. | Top-K alone could be limited. | R101-5 periodic injected 1 candidate; R101-25 periodic completed in about 97.2s but injection count was 0. Stagnation R101-10/25 triggered but injected 0. Stage6 summary: GA 100% feasible, 3.000 vehicles, distance 349.970; hybrid_topk 371.125; hybrid_preserve 358.810. | Timing was less important than candidate quality and neighborhood compatibility. | Supporting evidence |
-| Hybrid Stage 7-9 | Hybrid | GA candidate pool was too homogeneous; ALNS refined similar neighborhoods. | Multi-type high-diversity candidates plus paper-cost priority can give ALNS better starts and make final ranking consistent. | distance/vehicle/TW/drone/charging/petal/balanced candidate types, hybrid_diverse_topk, paper_cost_priority. | C101-10 hybrid_diverse_topk once had about 532s runtime before fix. | Debug: hybrid_diverse_topk 100% feasible, 2.667 vehicles, distance 344.074, paper cost 494.442, runtime 4.584s; final 108-run matrix retained for controlled conclusions. | Final Hybrid is a conditional enhancement, not guaranteed dominance. | Retained in final Hybrid |
-| Petal/spatial development | GA/ALNS/Hybrid metrics | Distance and vehicle count alone did not describe route shape; routes could cross or overlap spatially. | Petal/spatial soft metrics help diagnose and guide route quality without becoming hard constraints. | Add petal_score, crossing_count, route_compactness, sector_coherence, depot_radial_consistency. | R101-25 alns_core crossing_count 19 and petal_score 967.846 in one report. | Updated alns_full snapshot showed crossing_count 8 and petal_score 411.927 but vehicle_count 10 and distance 780.638. | Petal is a soft diagnostic/secondary metric, not a hard optimization goal. | Retained as soft metric/diagnostic |
-
-## Expanded Mathematical Model and Coupling Logic
-
-The final problem has three coupled decision layers: route construction, service-mode assignment, and energy/charging scheduling. A customer cannot be inserted as if it only changes distance. If customer \(i\) is moved from truck service to a drone mission, the truck route loses one service node, the drone route gains one or more legs, the launch and recovery nodes become binding, the drone SOC changes, the recovery time changes, and the truck may wait. That waiting can then delay all later truck customers and create time-window violations. Similarly, inserting a charging station solves battery feasibility but may increase completion time and cause later due-time violations.
-
-Conceptually, a solution is \(S=(R,M,G)\), where \(R\) is the set of truck routes, \(M\) is the set of same-route drone missions, and \(G\) is the charging plan. For each customer \(i \in C\), the coverage constraint is
-
-$$\sum_{r \in R} \mathbf{1}[i \in r] + \sum_{m \in M} \mathbf{1}[i \in P_m] = 1.$$
-
-Truck and drone time propagation follow the same causal form. If node \(j\) follows \(i\), then arrival is \(a_j = t_i^{dep} + d_{ij}/v\), service begins at \(b_j=\max(a_j,e_j)\), and hard time-window feasibility requires \(b_j \le l_j\). Waiting is \(b_j-a_j\), and is not itself infeasibility unless it causes downstream lateness.
-
-Truck SOC and drone SOC are propagated as \(E_j = E_i - \rho d_{ij} + g_i\), with \(0 \le E_j \le B\). Station visits are not created arbitrarily by algorithms; only generated station nodes can be inserted. Linear charging uses a constant rate. Nonlinear charging is implemented as segmented cumulative time over SOC intervals. Full policies set target energy to battery capacity; partial policies set target energy to a required-energy estimate plus safety margin. Thus, NFC can become expensive when it pushes charging into high-SOC low-rate segments, while NPC can avoid some high-SOC time if partial charge is enough for feasibility.
-
-This coupling explains why the early **route first + repair later** approach was structurally weak. If search ignores service mode, launch/recovery, energy, and charging, it spends most effort in regions that the simulator later rejects or heavily modifies. This reduces method differentiation and makes Hybrid shallow: GA and ALNS both rely on the same downstream feasibility machinery instead of exploring genuinely different feasible neighborhoods.
-
-## Deep GA Development Narrative
-
-### GA Stage 1 - From customer order to structured representation
-
-**Problem.** The first GA was close to a generic VRP/VRPTW genetic algorithm: it searched a customer permutation and decoded it into routes. This is not enough for Truck-Drone EVRPTW-NL because the chromosome did not express whether a customer is truck-served or drone-served, which truck route owns a drone mission, where the drone launches and recovers, or whether the truck/drone needs charging.
-
-**Evidence.** The GA development report records that early solutions frequently relied on final evaluator checks and could not show that GA itself understood the final constraints. User-observed diagnostics before the first GA-aware decoder showed low time-window feasibility in small R101 cases, with failures concentrated in time-window nodes rather than coverage or battery only.
-
-**Diagnosis.** This was not random noise. A customer-order chromosome simply cannot encode final-model decisions. If the representation lacks service mode and mission structure, no amount of crossover or mutation can directly improve those decisions.
-
-**Modification and mechanism.** The solution schema was expanded to `truck_routes`, `drone_tasks`, and `charging_plan`, and the GA individual gained service-mode, drone-priority, route-split, vehicle-count, and charging-policy information. This changes GA from a route-order optimizer into a constructive solver over the final solution structure.
-
-**Result and next decision.** The modification solved expressiveness but enlarged the search space. This motivated the constraint-aware decoder: once GA can represent the final model, it must construct within feasible neighborhoods instead of generating arbitrary structures and asking the evaluator to reject them.
-
-### GA Stage 2 - Constraint-aware decoder
-
-**Problem.** The project identified the original symptom: current small instances could have high aggregate feasibility rate but still be `feasible=False`, mainly because a few time-window nodes violated hard due times. A simple True/False feasible column was too coarse, so feasibility-rate diagnostics were introduced first.
-
-**Hypothesis.** If time windows, energy, charging, drone feasibility, and synchronization are considered during decoding, GA should stop wasting search effort on obviously invalid structures.
-
-**Modification.** The decoder moved from search-first/repair-later to TW/Energy/Charging/Drone/Sync-aware construction. Truck insertion evaluates time propagation and battery. Drone assignment is accepted only when launch/recovery, demand, endurance, time windows, and synchronization are reasonable. Fallback returns impossible drone customers to truck service.
-
-**Interpretation.** This is the most important GA methodological shift. Feasibility is no longer created mainly after the fact; it becomes part of how candidate solutions are generated. The remaining evaluator is still the final judge, but GA now searches a more meaningful region.
-
-### GA Stage 3 - Multi-customer drone and drone charging
-
-**Problem.** A single-customer sortie made the drone look decorative. It could occasionally remove one customer from a truck route, but it could not represent realistic local drone service or station-supported drone movement.
-
-**Modification.** The drone mission schema became `launch -> customer/station/... -> recover`, with `customers` listing all drone-served customers and `charging_plan` indicating truck or drone charging. This retained same-route launch/recovery but removed artificial limits on the number of drone-served customers inside a mission.
-
-**Mechanism.** A multi-customer drone route can reduce truck detours more meaningfully, but it must also pay drone travel, service, charging, and recovery synchronization time. This creates a real trade-off rather than decorative drone usage.
-
-**Remaining limitation.** The combinatorial space became larger, so later GA stages added hierarchical pruning, caching, route split, specialized mutation, and time budgets. This is why final GA is feasible and scalable enough for 25-customer experiments but still conservative in vehicle compression and local distance polishing.
-
-### GA Stage 4 - Diversity as a Hybrid role
-
-The final Hybrid work changed GA's role. GA was no longer only a standalone solver; it also became a generator of structurally different promising starts for ALNS. This explains the final candidate types: distance-oriented, vehicle-oriented, time-window-oriented, drone-aggressive, drone-conservative, charging-oriented, petal-oriented, and balanced. These were not arbitrary labels. They directly answer the Hybrid failure that quality-ranked Top-K candidates were still structurally similar.
-
-## Deep ALNS Development Narrative
-
-### ALNS Stage 1 - From scaffold to independent method
-
-The first ALNS limitation was methodological: a nearest-neighbor scaffold with fixed drone behavior was not a true ALNS and could not serve as a paper comparison method. The fix was to create `ALNSState`, independent initial construction, named destroy/repair/local-search operators, and diagnostics. Development evidence shows this made small cases feasible: R101-5 NPC was True with 3 vehicles, distance 161.151, runtime 0.845s; R101-10 NPC was True with 3 vehicles, distance 240.500, runtime 5.497s. This evidence is developmental, but it shows the transition from scaffold to independent runnable method.
-
-### ALNS Stage 2 - Problem-aware operators
-
-Generic random removal and simple insertion were insufficient because Truck-Drone EVRPTW-NL violations are not random. Time-window pressure, charging detours, drone synchronization, route crossing, and vehicle overuse have structure. Therefore destroy operators became time/route/drone/charging/spatial-aware, and repair operators became regret/TW/energy/drone/vehicle-aware. The mechanism is simple: destroy should expose the part of the solution causing pressure, while repair should reinsert customers with the constraints that caused the pressure in mind.
-
-### ALNS Stage 3 - Diagnostics-driven interpretation
-
-ALNS diagnostics are not just implementation logs. They reveal the search landscape. A high acceptance count but low improvement count means an operator often produces feasible or accepted moves but rarely changes the final objective. A low-frequency high-improvement operator may be valuable but hard to trigger. The final operator summary classifies operators into high-frequency/high-value, high-frequency/low-value, low-frequency/high-value, and low-frequency/low-value. This supports a conservative interpretation: ALNS has real local search capability, but its value depends on which neighborhoods align with the final ranking.
-
-### ALNS Stage 4 - Spatial and layered evaluation
-
-Petal and crossing metrics were introduced after visual route-quality concerns. R101-25 alns_core was reported with crossing_count 19 and petal_score 967.846 in one developmental snapshot. Later updated alns_full had crossing_count 8 and petal_score 411.927, but also 10 vehicles and distance 780.638. This is important negative evidence: a visually better route can trade off against vehicles and distance. Therefore petal_score is retained as a soft diagnostic/secondary metric, not a hard constraint.
-
-## Deep Hybrid Development Narrative
-
-### Hybrid Stage 1 - Naive GA to ALNS
-
-The initial rationale was valid: GA provides population-level global search and ALNS provides adaptive local refinement. The failure was also instructive. R101-5 retained GA because ALNS found a shorter but higher-vehicle candidate; R101-10 accepted ALNS refine with about 0.64% improvement; R101-25 again retained GA because the ALNS candidate used more vehicles. This showed that complementarity does not automatically become accepted synergy. The same local move can look good under distance but bad under vehicle-priority ranking.
-
-### Hybrid Stage 2 - Top-K and vehicle preservation
-
-Top-K addressed the diagnosis that GA rank-1 is not necessarily the best ALNS starting point. Development evidence reports R101-10 and R101-25 selecting rank-3 candidates, showing that candidate rank under GA is not identical to refinement potential. Vehicle-preserving refinement then fixed a second issue: ALNS could improve distance by increasing vehicles. The benefit is a more defensible Hybrid; the cost is reduced aggressiveness and rejection of some distance improvements.
-
-### Hybrid Stage 3 - Periodic, stagnation, and local neighborhoods
-
-The next hypothesis was that post-processing might be too late, so ALNS was inserted periodically or when GA stagnated. The experiments did not fully support this. R101-25 periodic completed within about 97.2s but had zero periodic injection. Stagnation triggered on R101-10 and R101-25 but also injected zero improvements. This means the bottleneck was not merely when ALNS was called. It was whether the candidate and neighborhood were compatible.
-
-Hybrid-local operators then tried same-vehicle and no-new-vehicle moves. This reduced the risk of damaging GA structures, but Stage6 still showed uneven benefit: GA had 100% feasibility, 3.000 vehicles, distance 349.970 in the debug batch; hybrid_topk had 371.125; hybrid_preserve had 358.810. The interpretation is not that Hybrid was useless, but that shallow local refinement cannot overcome homogeneous candidate pools.
-
-### Hybrid Stage 4 - Diverse Top-K final direction
-
-The final Hybrid shift was therefore from more ALNS calls to more structurally diverse GA candidates. The debug evidence was strong enough to justify the final direction: hybrid_diverse_topk reached 100% feasibility, 2.667 vehicles, distance 344.074, paper cost 494.442, runtime 4.584s in the 10-customer debug summary, outperforming the other debug methods on paper cost. But smoke and final evidence still required caution: in one R101-25 single-case audit, Hybrid found shorter distance than GA but used 8 vehicles instead of 7; in the 25-customer smoke, Hybrid had 7 vehicles and distance 812.254 versus GA 7 vehicles and 810.202. Final positioning must therefore depend on the controlled 108-run matrix rather than the most favorable developmental result.
-
-## Recovered Supporting Experiment Roles
-
-- **5-customer evidence** demonstrates that the full state machinery can run: coverage, time windows, battery, drone mission, charging, and synchronization can all be traced. It is correctness/development evidence, not final performance evidence.
-- **10-customer evidence** is the main method-development scale. It exposed Hybrid runtime pathology, candidate homogeneity, and the benefit of diverse candidate types.
-- **25-customer development evidence** shows medium-scale behavior and smoke risks. It is useful for explaining why final 108-run controlled testing was needed.
-- **50-customer evidence** is stress/development evidence only unless a controlled final matrix is later run. It should support robustness discussion but not primary claims.
-
-## Research / Method Development Causal Map
-
-```mermaid
-flowchart TD
-  A[Generic customer-order routes] --> B[Shared evaluator/repair dominates feasibility]
-  B --> C[Method differences become blurred]
-  C --> D[Structured Truck-Drone solution schema]
-  D --> E[Constraint-aware GA decoder]
-  E --> F[Independent ALNS state and operators]
-  F --> G[Naive Hybrid instability]
-  G --> H[Top-K candidates]
-  H --> I[Vehicle-count side effect]
-  I --> J[Vehicle-preserving refinement]
-  J --> K[Periodic/stagnation tests]
-  K --> L[Injection often zero]
-  L --> M[Hybrid-local neighborhoods]
-  M --> N[Candidate homogeneity remains]
-  N --> O[Diverse Top-K final Hybrid]
-  O --> P[Final 108-run controlled evaluation]
-```
-
-## Deep RQ Interpretation
-
-### RQ1 Constraint Adaptation
-
-The project progressively moved constraints inside the algorithms. Early feasibility was mostly downstream. Final GA considers service mode, vehicle split, drone feasibility, time windows, charging, and synchronization during decoding. Final ALNS uses destroy/repair/local operators that target time, energy, drone, charging, and spatial structure. Final Hybrid adds conversion and vehicle-preserving rules. The evaluator remains the final court; this is appropriate because shared feasibility checking prevents methods from silently relaxing constraints.
-
-### RQ2 Algorithmic Behavior
-
-GA tends to be stable because it constructs conservatively. ALNS can discover independent local structures but may use more vehicles or spend time in low-yield neighborhoods. Hybrid can improve paper cost only when candidate diversity plus ALNS refinement beats the GA baseline under the same vehicle-feasibility priorities. Therefore vehicle count, distance, waiting, charging, and runtime must be interpreted together.
-
-### RQ3 Instance Sensitivity
-
-Instance families change the geometry and time-window pressure. C-type clustered instances can look simple spatially but may create concentrated time-window and route-balance pressure. R-type random instances create longer spatial spread. RC mixes both. Without profiling every violation by instance, the correct wording is: observed performance is instance-dependent; the plausible mechanisms are customer dispersion, cluster tightness, and time-window/synchronization pressure; exact causal attribution requires deeper per-node diagnostics.
-
-### RQ4 Charging Policy
-
-The charging-policy analysis must follow the 2x2 model. Full policies reduce energy risk but can waste time by charging beyond what is needed. Partial policies can reduce charging time but require good target-energy estimation. Nonlinear policies penalize high SOC because the segmented high-SOC rate is lower. Therefore NPC can be attractive when partial charge avoids the slow high-SOC region, but it can also be risky if target energy is underestimated.
-
-### RQ5 Hybrid Effectiveness
-
-Hybrid's research value lies in explaining when fusion works. The development chain shows four necessary conditions: candidate diversity, compatible ALNS neighborhood, vehicle-preserving acceptance, and ranking alignment. If any one fails, ALNS may improve a local metric but fail the final Hybrid rule. This is why Hybrid should be presented as a conditional method rather than a guaranteed dominant method.
-
-### RQ6 Computational Robustness
-
-Every major improvement increased computational burden: more GA candidates, more drone-task options, more ALNS operators, more local search candidates, more simulations, and more Hybrid refinement calls. The response was pruning, caching, layered evaluation, time budgets, and candidate Top-K. The correct research conclusion is a quality-runtime trade-off, not simply 'long runtime is a bug'.
-
-## Expanded Negative Results
-
-### Hybrid non-dominance
-
-Evidence: development reports show cases where Hybrid retained GA, and final V2 W/T/L tables report conditional wins/losses. Explanation: ALNS local improvements may conflict with vehicle count or paper-cost priority. Lesson: Hybrid needs aligned acceptance rules and candidate diversity.
-
-### Vehicle-distance conflict
-
-Evidence: R101-25 single-case audit reported Hybrid shorter distance but more vehicles than GA. Explanation: splitting service across more routes can reduce route distance while violating the research preference for fewer vehicles. Lesson: vehicle-preserving refinement is necessary for credible paper comparison.
-
-### Ineffective operators
-
-Evidence: ALNS operator diagnostics show many operators are called far more often than they improve. Explanation: feasibility-preserving neighborhoods in this problem are narrow; many moves are accepted or feasible but not ranking-improving. Lesson: operator count is not contribution; improvement rate and accepted improvement matter.
-
-### Runtime pathology
-
-Evidence: Hybrid final development recorded a C101-10 hybrid_diverse_topk runtime around 532s before budget fixes; final runtime outliers are retained in V2. Explanation: candidate enumeration and full evaluation can create heavy tails. Lesson: runtime must be a first-class metric.
-
-### Early repair/evaluator dependence
-
-Evidence: early GA and ALNS generated rough structures and relied heavily on shared checks. Explanation: when feasibility comes mainly from a common downstream mechanism, method differences shrink and Hybrid complementarity weakens. Lesson: constraints must enter decoder/state/operator design.
-
-## Original V2 Report
-
-# Master Experimental Report V2: Truck-Drone EVRPTW-NL
-
-> Paper master draft. This file reconstructs the research record from the final code, frozen model, saved configurations, diagnostics, and existing results. It is not the final conference paper.
+> This integrated edition replaces the earlier front-loaded deep supplement. Development evidence is now embedded into the final method descriptions, RQ analysis, negative results, and discussion. No solver was rerun and no algorithm code was modified.
 
 ## Evidence Coverage Statement
 
-Highest-priority evidence used: final code in `TruckDrone_EVRPTW_NL`, `docs/final_model_freeze_spec.md`, `configs/hybrid_final_25_overnight.yaml`, `results/hybrid_final_25_overnight/summary.csv`, and `results/hybrid_final_25_overnight/raw_results.jsonl`. Development reports are used for method evolution. Early 5/10-customer and truck-only results are supporting or historical only. No solver was rerun.
-
-Main analysis uses **108 final 25-customer runs**. Infeasible rows and runtime outliers are retained. Literature gaps are marked `[REFERENCE NEEDED]`.
+This report uses three evidence levels. **Controlled final evidence** refers to the final 25-customer 108-run matrix and is the only basis for formal performance claims. **Developmental evidence** refers to 5/10/25/50-customer stage experiments, method logs, Hybrid audits, and smoke tests; it explains why the algorithms evolved but is not treated as a controlled ablation unless explicitly stated. **Diagnostic evidence** refers to operator calls, accepted/improved counts, violation fields, runtime outliers, candidate diagnostics, and petal/crossing metrics; it is used to explain mechanisms. The main sources are `final_model_freeze_spec.md`, final code, final CSV/JSONL results, `ga_development_report.md`, `alns_development_report.md`, `hybrid_development_report.md`, `hybrid_stage6_report.md`, `hybrid_final_audit.md`, `hybrid_final_25_smoke_audit.md`, `petal_route_design_report.md`, and `modeling_and_progress.md`.
 
 ## 1. Executive Summary
 
-This study investigates **constraint-aware metaheuristic solution and computational analysis for a unified Truck-Drone EVRPTW-NL**. The final model combines routing, hard time windows, truck/drone energy propagation, launch-recovery synchronization, station charging, and LFC/LPC/NFC/NPC charging policies. The evidence does not support a preset universal winner. It supports a trade-off analysis: GA is a strong constructive baseline, ALNS provides independent neighborhood search and diagnostics, and Hybrid is conditionally useful when candidate diversity gives ALNS refinable starting structures.
+The research focus is **constraint-aware metaheuristic solution and computational analysis for a unified Truck-Drone EVRPTW-NL**. The final problem couples truck routing, drone service assignment, hard time windows, truck and drone energy propagation, launch-recovery synchronization, charging-station decisions, and four charging policies: LFC, LPC, NFC, and NPC.
 
-| method | runs | feasible_runs | feasible_rate | feasible_vehicle_count_mean | feasible_total_distance_mean | feasible_paper_cost_mean | runtime_median | runtime_mean | runtime_max |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| ALNS | 36 | 27 | 75.0 | 8.888889 | 874.735865 | 1319.028256 | 90.529717 | 456.633936 | 10929.261842 |
-| GA | 36 | 24 | 66.667 | 7.666667 | 906.231298 | 1262.172734 | 76.122086 | 402.306639 | 10922.699444 |
-| Hybrid | 36 | 26 | 72.222 | 7.884615 | 891.437547 | 1232.753151 | 63.404685 | 62.724606 | 73.821376 |
+The final 25-customer controlled experiment contains 108 runs across C101/R101/RC101, GA/ALNS/Hybrid, LFC/LPC/NFC/NPC, and three seeds. In the controlled final evidence, ALNS has the highest feasible rate at 75.0%, Hybrid follows at 72.222%, and GA reaches 66.667%. GA uses fewer feasible vehicles on average (7.666667) than Hybrid (7.884615) and ALNS (8.888889). ALNS obtains the shortest feasible total distance on average (874.735865), while Hybrid obtains the lowest feasible paper cost (1232.753151) and the most stable runtime median/mean profile (63.404685s / 62.724606s). These results do not support a universal winner; they support a search-behavior interpretation.
 
-## 2. Research Focus and Questions
+Developmental evidence explains why. Early algorithms generated rough routes and relied heavily on shared simulation/evaluation. That made feasibility less attributable to each algorithm and weakened Hybrid complementarity. GA therefore moved toward structured representation and constraint-aware decoding. ALNS moved from generic removal/insertion toward time, energy, drone, charging, spatial, and local diagnostic operators. Hybrid moved from naive GA-best refinement to Top-K, vehicle-preserving refinement, periodic/stagnation triggering, local neighborhoods, and finally diverse candidate generation. The final 108-run matrix tests these accumulated design decisions; it does not erase the negative development evidence. Hybrid is competitive, especially in paper cost, but it still does not dominate GA or ALNS.
 
-| RQ | Question | Evidence |
-| --- | --- | --- |
-| RQ1 | How can GA and ALNS be adapted into constraint-aware Truck-Drone EVRPTW-NL methods? | solution schema, simulator, GA/ALNS code |
-| RQ2 | How do GA, ALNS, and Hybrid differ across feasibility, vehicles, distance, charging, waiting, paper cost, and runtime? | final 108-row summary |
-| RQ3 | How do C/R/RC instance structures affect method behavior? | instance_type_summary.csv |
-| RQ4 | How do LFC/LPC/NFC/NPC affect performance? | charging_policy_summary.csv and charging.py |
-| RQ5 | When and why does Hybrid improve, fail, or degrade? | hybrid diagnostics and W/T/L |
-| RQ6 | How stable are runtimes and what extreme cases appear? | runtime_summary.csv and runtime_outliers.csv |
+## 2. Research Questions
+
+RQ1 asks how GA and ALNS became constraint-aware rather than generic routing methods. RQ2 compares final search behavior and trade-offs. RQ3 studies C/R/RC sensitivity. RQ4 studies the 2 x 2 charging-policy design. RQ5 studies when Hybrid improves or fails. RQ6 studies computational robustness and runtime heavy tails. These questions are interpreted through the three evidence levels defined above.
 
 ## 3. Literature and Research Context
 
-Solomon VRPTW motivates C/R/RC time-window benchmarks [Solomon1987, REFERENCE NEEDED]. Schneider E-VRPTW motivates electric truck routing with time windows and charging stations [Schneider2014]. ETRD-NL motivates auxiliary vehicle synchronization and nonlinear/partial charging context [ETRD-NL, REFERENCE NEEDED]. ALNS, GA, Hybrid metaheuristics, truck-drone routing, and EV charging references require final bibliography completion; see `docs/reference_gaps.md`.
+The project is grounded in Solomon VRPTW benchmarks, Schneider E-VRPTW, ETRD-NL, classic ALNS, genetic algorithms for routing, truck-drone routing, and EVRP charging literature. Current project evidence supplies the implementation facts; external literature supplies conceptual motivation for time windows, electric routing, nonlinear/partial charging, truck-drone synchronization, GA population search, ALNS neighborhood search, and hybrid metaheuristics. Bibliographic gaps are documented in `reference_gaps.md`; unresolved literature items remain marked `[REFERENCE NEEDED]` rather than fabricated.
 
 ## 4. Problem Motivation
 
-The complexity chain is VRP -> VRPTW -> EVRPTW -> Truck-Drone Routing -> Energy-constrained Truck-Drone Routing -> Nonlinear/Partial Charging -> Truck-Drone EVRPTW-NL. Each step adds decisions and hard constraints: customer sequence, service timing, battery state, station visits, service assignment, launch/recovery, synchronization, charging amount, and SOC-dependent charging time. These decisions are coupled, so a route change can affect time windows, energy feasibility, drone synchronization, and charging time at the same time.
+A classical VRP decides customer visit order. VRPTW adds hard service intervals, so distance-short routes can become infeasible. EVRPTW adds battery state and charging-station decisions, so route feasibility depends on energy propagation and charging time. Truck-drone routing adds service assignment, launch and recovery nodes, drone-route construction, and synchronization. Nonlinear and partial charging add charging amount and SOC-dependent charging time. In this project these additions are not independent. Moving one customer can change truck arrival times, drone launch feasibility, drone SOC, charging needs, recovery waiting, and all downstream time-window feasibility. This is why early `route first + repair later` behavior was not enough and why the final algorithms had to move constraint awareness inside search.
 
-![Problem schematic](../results/paper_figures_v2/A1_problem_schematic.png)
+## 5. Final Mathematical Model and Coupling Logic
 
-## 5. Source Problem Evolution
+The final model is conceptual rather than a MILP implementation: the actual solvers use structured solution objects, route simulation, and evaluator checks. A solution is represented as \(S=(R,M,G)\), where \(R\) is the set of truck routes, \(M\) the set of same-route drone missions, and \(G\) the truck/drone charging plan. Customers \(C\), charging stations \(F\), depot \(0\), truck routes \(r\), drone missions \(m\), and nodes \(N=C \cup F \cup \{0\}\) form the main sets.
 
-| Dimension | Schneider E-VRPTW | ETRD-NL | Final model |
-| --- | --- | --- | --- |
-| Time windows | Yes | project deep reading context | hard TW for truck/drone service |
-| Electric truck | Yes | yes in project context | truck SOC and station charging |
-| Auxiliary vehicle | No | robot | drone |
-| Synchronization | No | truck-robot synchronization | same-route truck-drone recovery synchronization |
-| Nonlinear/partial charging | not final source for NL/partial | yes | LFC/LPC/NFC/NPC |
-| Service structure | truck-only | truck-robot | truck or multi-customer drone mission |
+Customer coverage is hard: every customer must be served exactly once by either truck or drone, written conceptually as \(x_i^{truck}+x_i^{drone}=1, \forall i\in C\). Without this constraint, a solver could reduce distance by omitting customers or duplicating service. Truck routes start and end at the depot: \(R_r=(0,...,0)\). Drone missions are same-route missions: \(m=(r, l, P_m, q)\), where launch \(l\) and recovery \(q\) both appear in truck route \(R_r\), launch precedes recovery, and \(P_m\) can contain multiple customers and charging stations. Cross-truck recovery is not part of the frozen model.
 
-## 6. Final Mathematical Model
+Time propagation is causal. If vehicle \(v\) travels from node \(i\) to \(j\), arrival is \(a_j^v=d_i^v+t_{ij}^v\), service starts at \(b_j^v=\max(a_j^v,e_j)\), and hard time-window feasibility requires \(b_j^v\le l_j\). Waiting is recorded but not itself infeasible unless it pushes downstream service past due times. Truck-drone synchronization at recovery is \(b_q^{sync}=\max(a_q^{truck},a_q^{drone})\), producing truck wait or drone wait. This constraint exists because the truck cannot continue with the drone unavailable.
 
-These variables form a conceptual mathematical representation, while the actual solvers use structured solution objects and simulation.
+Energy propagation is also causal. For truck or drone \(v\), SOC follows \(E_j^v=E_i^v-\rho_v d_{ij}+g_i^v\), with \(0\le E_j^v\le B_v\). A charging station visit can add \(g_i^v\), but only at existing generated station nodes. Capacity constraints require truck load and drone mission load to remain within configured capacity. Violations are checked by the shared simulator/evaluator; algorithms may anticipate them, but final feasibility is always judged by the evaluator.
 
-Sets: depot $0$, customers $C$, charging stations $F$, nodes $N={0}\cup C\cup F$, truck routes $R$, drone missions $M_r$ attached to route $r$. Parameters include Euclidean distance $d_{ij}$, travel time $d_{ij}/v$, demand $q_i$, time window $[e_i,l_i]$, service time $s_i$, truck/drone capacities $Q_T,Q_D$, batteries $B_T,B_D$, consumption rates $\rho_T,\rho_D$, and charging functions. Conceptual variables include truck arc use, service mode, mission use, arrival/start/waiting times, truck/drone SOC, and charged energy.
+The key coupling is sequential: customer assignment changes truck/drone route structure; route structure changes arrival times; arrival times change launch/recovery feasibility; launch/recovery timing changes synchronization waiting; waiting changes downstream time windows; route legs change SOC; SOC changes charging decisions; charging time again changes time windows. This coupling is the technical reason the final GA, ALNS, and Hybrid designs cannot be reduced to ordinary distance minimization.
 
-| Constraint | Formula/rule | Code | Violation | Hard |
-| --- | --- | --- | --- | --- |
-| Customer coverage | each customer served exactly once by truck or drone | route_simulator.py:_check_customer_coverage | customer_coverage | Yes |
-| Depot start/end | each truck route starts and ends at depot | route_simulator.py:_simulate_multi_route_solution | truck_route | Yes |
-| Truck/drone capacity | route demand <= capacity | route_simulator.py capacity checks | capacity | Yes |
-| Drone mission legality | launch/recover in same truck route and ordered | route_simulator.py:_check_drone_tasks | drone_mission | Yes |
-| Time propagation/TW | arrival + waiting; service_start <= due | route_simulator.py:_simulate_one_route_states/_simulate_drone_task | time_window | Yes |
-| Synchronization | early side waits at recovery | route_simulator.py | sync / waiting metrics | structure hard, waiting soft |
-| Truck/drone SOC | SOC decreases by distance*rate and recovers by charging | route_simulator.py + charging.py | truck_battery/drone_battery | Yes |
-| Charging station use | use existing generated stations only | instance_builder.py + route_simulator.py | charging | Yes |
-| Petal/spatial quality | compactness/crossing/petal score | spatial_metrics.py | none | No |
+## 6. Mathematical Charging Model
 
-The report scalar `paper_cost = total_distance + charging_time + 0.25*waiting_time + 0.25*drone_waiting_time`. It is an analysis scalar, not a claim of global optimality.
+The frozen charging model treats LFC/LPC/NFC/NPC as a 2 x 2 design: linear vs nonlinear and full vs partial. Full charging sets target energy to capacity. Partial charging sets target energy to a required-energy estimate plus margin. Linear charging uses constant-rate cumulative time, so charging time is proportional to added energy. Nonlinear charging is implemented as an engineering segmented SOC approximation: charging in high SOC intervals is slower, so cumulative time increases faster near full charge.
 
-## 7. Mathematical Charging Model
+| | Full target | Partial target |
+|---|---|---|
+| Linear | LFC | LPC |
+| Nonlinear | NFC | NPC |
 
-| Policy | Linearity | Target | Meaning |
-| --- | --- | --- | --- |
-| LFC | Linear | Full | constant-rate charge to battery capacity |
-| LPC | Linear | Partial | constant-rate charge to required energy plus safety margin |
-| NFC | Nonlinear | Full | segmented SOC charge to battery capacity |
-| NPC | Nonlinear | Partial | segmented SOC charge to required energy plus safety margin |
+This model explains the final RQ4 pattern. In final controlled evidence, ALNS charging time falls from LFC 166.309045 to LPC 80.751952, and from NFC 242.731195 to NPC 76.090921. GA and Hybrid show the same partial-charging direction: GA LFC/LPC/NFC/NPC charging times are 200.759/110.421/248.166/124.416, while Hybrid values are 157.640/97.580/287.642/101.119. The mechanism is consistent with the model: partial policies avoid unnecessary high-SOC charging, especially under nonlinear charging. This is controlled final evidence for charging-time behavior, not proof of global optimality.
 
-![Charging mechanism](../results/paper_figures_v2/A2_charging_mechanism.png)
+## 7. Unified Computational Framework
 
-## 8. Unified Computational Framework
+All final methods use the same final solution schema, simulator, evaluator, and CSV pipeline. This shared evaluator is important for fairness: GA, ALNS, and Hybrid can make different construction choices, but they are judged by the same feasibility and metric definitions. It also explains why early development had to move constraints into the algorithms. If all methods merely generated rough structures and then relied on the same downstream checks, method-specific search behavior became difficult to distinguish.
 
-Instance -> Solver -> Solution schema -> Route simulator -> Evaluator -> CSV/JSONL/Figures. GA, ALNS, and Hybrid use the same final schema and evaluator; the evaluator reports metrics rather than enforcing a single scalar objective.
+## 8. Final GA Method with Integrated Evolution
 
-## 9. Final GA Method
+### 8.1 Structured representation and why it exists
 
-Final GA uses structured individuals rather than only customer order. It encodes customer order, service-mode preference, drone priority, charging policy, route split bias, and vehicle allowance. The decoder constructs multi-route truck solutions, tries truck/drone service choices, inserts charging when necessary, uses fallback when drone service is infeasible or unhelpful, and then calls the unified evaluator.
+Final GA represents customer order, service modes, truck route splits, drone priorities, charging policy preference, and multi-route solution structure. This component exists because the early customer-order GA could not express the final problem. A pure customer permutation cannot represent whether customer \(i\) is served by truck or drone, which route launches the drone, where recovery occurs, whether a drone route visits several customers, or where truck/drone charging occurs. Developmental evidence therefore motivated the transition from `customer_order` alone to `truck_routes`, `drone_tasks`, `charging_plan`, `service_mode`, `route_split_bias`, and drone-priority information. The final behavior in RQ2 is consistent with this design: GA has the lowest average feasible vehicle count (7.666667), which reflects its constructive route-splitting and service-assignment bias.
 
-| Step | Purpose | Code |
-| --- | --- | --- |
-| Representation | encode order, service mode, drone/charging preference | solvers/solve_ga.py, solvers/ga_tools.py |
-| Initialization | seed balanced, distance, vehicle, TW, drone, charging, petal candidates | generate_diverse_ga_candidates_for_hybrid |
-| Decoder | build truck_routes, drone_tasks, charging_plan | ga_tools.py |
-| Mutation/crossover | change order, service mode, route bias, policy | solve_ga.py helpers |
-| Evaluation | shared evaluator and ranking metrics | evaluator.py |
+### 8.2 Constraint-aware decoder and why it exists
 
-## 10. Final ALNS Method
+The final GA decoder constructs routes while considering time windows, truck energy, charging, drone feasibility, and synchronization. This component exists because early search-first/repair-later behavior produced structurally weak candidates. Development logs record that early R101-5 GA+NPC had only 40% time-window feasibility and total violation about 3.086 before awareness improved. That evidence is developmental, not a controlled ablation, because other settings evolved. It still explains the design decision: if feasibility is only discovered after a route is built, crossover and mutation spend many evaluations in irrelevant infeasible neighborhoods. Moving TW/Energy/Charging/Drone/Sync checks into decoding creates candidates that the evaluator can meaningfully compare.
 
-Final ALNS is an independent method with explicit state, initial construction, destroy/repair/local search, candidate evaluation, acceptance, diagnostics, and best-state update. It does not use GA initial solutions in baseline mode.
+### 8.3 Multi-customer drone and charging mechanism
 
-## 11. Final Hybrid GA-ALNS
+Final GA supports multi-customer drone missions and drone station visits under the frozen same-route launch/recovery rule. This exists because early single-customer drone insertion was judged decorative: it could show a drone line on a plot but did not sufficiently alter truck workload. The final drone route `[launch, customer..., station..., recover]` gives GA a real service-assignment mechanism. The final controlled evidence shows GA feasible drone distance mean 101.991886, indicating drone missions are present in feasible solutions, although this alone does not prove they always improve cost.
 
-Final Hybrid uses diverse GA candidate generation, Top-K diversity selection, conversion to ALNS state, vehicle-preserving ALNS refinement, evaluator validation, and paper-cost/ranking comparison. Its theoretical complementarity is GA global/diverse construction plus ALNS local restructuring; the data show this is conditional, not guaranteed.
+### 8.4 Diversity generation and the Hybrid role
 
-## 12. Algorithm Development History
+Final GA also acts as a diverse promising-start generator for Hybrid. This role did not exist in the earliest standalone GA objective. It emerged after Hybrid development showed that GA-best was not necessarily the best ALNS starting point and quality Top-K candidates could still be structurally homogeneous. Diverse candidate types such as distance-oriented, vehicle-oriented, time-window-oriented, drone-aggressive, drone-conservative, charging-oriented, petal-oriented, and balanced were introduced to give ALNS different neighborhoods. The 10-customer debug evidence supports this direction: `hybrid_diverse_topk` reached 100% feasibility, 2.667 average vehicles, 344.074 average distance, 494.442 paper cost, and 4.584s runtime. The later 25-customer smoke evidence warns that this did not become universal dominance.
 
-| Stage | Problem | Interpretation |
-| --- | --- | --- |
-| Naive Hybrid | GA best + ALNS often gave zero improvement | single best start was too narrow |
-| Top-K | GA best was not always best ALNS start | candidate diversity matters |
-| Vehicle-preserving | ALNS lowered distance but increased vehicles | refinement must obey paper ranking |
-| Periodic/Stagnation | post-processing may be too late | timing alone did not guarantee injection |
-| Hybrid-local | independent ALNS neighborhoods too disruptive | small local refinements are safer but uneven |
-| Diverse Top-K final | candidate homogeneity limited synergy | explicit candidate types are the final Hybrid direction |
+## 9. Final ALNS Method with Integrated Evolution
 
-## 13. Experimental Design
+Final ALNS uses an explicit state, independent initial construction, destroy/repair/local-search operators, layered candidate screening, full evaluator validation, and diagnostics. Its final operator families are not arbitrary. D-WorstTime and R-TWAware exist because early failures exposed time-window pressure. D-ChargingCritical, R-EnergyAware, and charging cleanup exist because generic insertion cannot reason about battery infeasibility and charging delay. DroneReassign and DroneRebuild exist because service assignment, launch/recovery, and synchronization are central coupling constraints. Crossing and petal operators exist because route geometry issues were observed during development and route quality could not be captured by distance alone.
 
-| source_instances | customer_count | methods | charging_policies | seeds | station_count | nominal_time_budget | total_runs |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| R101, C101, RC101 | 25 | GA, ALNS, Hybrid | LFC, LPC, NFC, NPC | 1987, 42, 128 | 8 | 90s | 108 |
+The final controlled evidence shows ALNS has the highest feasible rate (75.0%) and the shortest feasible total distance mean (874.735865), but also the highest feasible vehicle count mean (8.888889) and highest paper cost mean (1319.028256). This matches its development history. ALNS was strengthened as a feasibility and local-restructuring method; the same local freedom can reduce distance while accepting more routes. Earlier Hybrid audits had already exposed this vehicle-distance conflict when ALNS refined a GA solution to shorter distance but more vehicles.
 
-## 14. Experiment Inventory
+Layered evaluation was introduced after full evaluator calls became a runtime bottleneck. Developmental evidence includes R101-25 ALNS core cases around 45-47s with hundreds of evaluator calls and later runtime-pathology discussions. The final runtime evidence still shows ALNS heavy tails: median 90.530s, mean 456.634s, max 10929.262s, with two runs above 1000s. Thus the final ALNS is paper-comparable but computationally less stable than Hybrid.
 
-| Experiment ID | Stage | customer count | source instance | algorithm | charging policy | seeds | final classification |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| E001 | ALNS ablation | 25 | R101, C101, RC101 | alns_core, alns_vehicle, alns_petal, alns_drone, alns_charging, alns_full | LFC, LPC, NFC, NPC |  | SUPPORTING |
-| E002 | ALNS ablation | 50 | R101, C101, RC101 | alns_core, alns_vehicle, alns_petal, alns_drone, alns_charging, alns_full | LFC, LPC, NFC, NPC |  | SUPPORTING |
-| E003 | debug/smoke validation | 5, 10 | R101, C101, RC101 | alns_core, alns_vehicle, alns_petal, alns_drone, alns_charging, alns_full | NPC |  | EXCLUDED |
-| E004 | debug/smoke validation | 5, 10 | R101, C101, RC101 | ga, alns, hybrid | LFC, LPC, NFC, NPC |  | EXCLUDED |
-| E005 | Hybrid development | 25 | R101, C101, RC101 | ga, alns_full, hybrid_topk, hybrid_stagnation, hybrid_diverse_topk, hybrid_diverse_stagnation | NPC | 1987, 42, 128 | SUPPORTING |
-| E006 | final 25-customer formal experiment | 25 | R101, C101, RC101 | ga, alns_full, hybrid_diverse_topk | LFC, LPC, NFC, NPC | 1987, 42, 128 | MAIN |
-| E007 | debug/smoke validation | 25 | R101 | ga, alns_full, hybrid_diverse_topk | NPC | 1987 | EXCLUDED |
-| E008 | Hybrid development | 50 | R101, C101, RC101 | ga, alns_full, hybrid_topk, hybrid_stagnation, hybrid_diverse_topk, hybrid_diverse_stagnation | NPC | 1987, 42, 128 | SUPPORTING |
-| E009 | debug/smoke validation | 10 | R101, C101, RC101 | ga, alns_full, hybrid_topk, hybrid_stagnation, hybrid_diverse_topk, hybrid_diverse_stagnation | NPC |  | EXCLUDED |
-| E010 | Hybrid development | 25 | R101, C101, RC101 | ga, alns_full, hybrid_topk, hybrid_preserve, hybrid_periodic, hybrid_stagnation | NPC |  | SUPPORTING |
-| E011 | debug/smoke validation | 10 | R101, C101, RC101 | ga, alns_full, hybrid_topk, hybrid_preserve, hybrid_periodic, hybrid_stagnation | NPC |  | EXCLUDED |
-| E012 | Hybrid development | 25 | R101, C101, RC101 | ga, alns_full, hybrid_topk, hybrid_preserve, hybrid_periodic, hybrid_stagnation | LFC, LPC, NFC, NPC |  | SUPPORTING |
-| E013 | debug/smoke validation | 5, 10 | R101, C101, RC101 | ga, alns_full, hybrid_refine, hybrid_topk, hybrid_preserve, hybrid_periodic, hybrid_stagnation | NPC |  | EXCLUDED |
-| E014 | petal/spatial development | 25 | R101, C101, RC101 | ga_td_petal, alns_td_petal | LFC, LPC, NFC, NPC |  | SUPPORTING |
-| E015 | petal/spatial development | 50 | R101, C101, RC101 | ga_td_petal, alns_td_petal | NPC |  | SUPPORTING |
+## 10. ALNS Operator Analysis: Motivation, Outcome, Interpretation
 
-## 15. Data Quality Audit
+| operator_name | operator_type | runs | calls | accepted_results | improved_results | acceptance_rate | improvement_rate | average_runtime_weighted | effectiveness_class |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| D-DroneTask | destroy | 588 | 10701 | 8370 | 375 | 0.78217 | 0.035043 | 0.283368 | High-frequency / high-value |
+| D-WorstTime | destroy | 610 | 7530 | 4396 | 210 | 0.583798 | 0.027888 | 0.14871 | High-frequency / high-value |
+| D-ChargingCritical | destroy | 501 | 5350 | 2615 | 193 | 0.488785 | 0.036075 | 0.325508 | High-frequency / high-value |
+| D-Crossing | destroy | 536 | 4815 | 2436 | 171 | 0.505919 | 0.035514 | 0.757803 | High-frequency / high-value |
+| D-SyncCritical | destroy | 153 | 2086 | 1603 | 31 | 0.768456 | 0.014861 | 0.304434 | High-frequency / high-value |
+| D-RouteRemoval | destroy | 237 | 4225 | 3377 | 28 | 0.79929 | 0.006627 | 0.156639 | High-frequency / low-value |
+| D-AngleSector | destroy | 150 | 1498 | 938 | 27 | 0.626168 | 0.018024 | 0.363083 | High-frequency / high-value |
+| D-Cluster | destroy | 157 | 1094 | 598 | 20 | 0.546618 | 0.018282 | 10.38884 | High-frequency / high-value |
+| D-Random | destroy | 249 | 2717 | 1871 | 19 | 0.688627 | 0.006993 | 0.163954 | High-frequency / low-value |
+| LS-DroneRebuildV2 | local_search | 353 | 18998 | 18550 | 2791 | 0.976419 | 0.14691 | 0.053495 | High-frequency / high-value |
+| H-DroneReassign | local_search | 291 | 9098 | 9098 | 1433 | 1.0 | 0.157507 | 0.23665 | High-frequency / high-value |
+| LS-DroneRebuild | local_search | 49 | 7320 | 7232 | 812 | 0.987978 | 0.110929 | 0.005128 | High-frequency / high-value |
+| LS-RouteMergeV2 | local_search | 240 | 13701 | 13701 | 393 | 1.0 | 0.028684 | 1.2141 | High-frequency / high-value |
+| LS-RelocateV2 | local_search | 389 | 21738 | 21738 | 254 | 1.0 | 0.011685 | 0.040734 | High-frequency / high-value |
+| H-CrossRouteRelocateNoNewVehicle | local_search | 291 | 9098 | 9098 | 121 | 1.0 | 0.0133 | 0.00919 | High-frequency / high-value |
+| LS-CrossingRemoval | local_search | 350 | 18261 | 18261 | 65 | 1.0 | 0.003559 | 0.019963 | High-frequency / low-value |
+| LS-Relocate | local_search | 49 | 7320 | 7320 | 31 | 1.0 | 0.004235 | 0.011988 | High-frequency / low-value |
+| H-SwapSameVehicle | local_search | 291 | 9098 | 9098 | 9 | 1.0 | 0.000989 | 0.007393 | High-frequency / low-value |
+| H-RelocateSameVehicle | local_search | 291 | 9098 | 9098 | 7 | 1.0 | 0.000769 | 0.00805 | High-frequency / low-value |
+| H-LaunchRecoverAdjust | local_search | 291 | 9098 | 9098 | 1 | 1.0 | 0.00011 | 0.001167 | High-frequency / low-value |
+
+The operator diagnostics must be read as diagnostic evidence, not final performance proof. Operators with high call counts are not automatically useful; the relevant question is whether calls become accepted or improved solutions under the final ranking. Drone-aware operators were added because development repeatedly identified drone assignment and synchronization as coupled constraints. When DroneReassign or DroneRebuild variants show nonzero improvement, that supports the search-landscape interpretation that customer service mode and launch/recovery structure are meaningful neighborhoods. Conversely, ChargingPolish, WaitingReduction, PetalPolish, or RouteMerge variants can have low improvement even though they were theoretically motivated. This does not make their original hypotheses irrational; it shows that trigger conditions may be rare, other operators may already handle the improvement, or the move improves a secondary metric without improving the final ranking. In the paper, such operators should be reported as negative diagnostic findings, not hidden.
+
+## 11. Final Hybrid GA-ALNS with Integrated Evolution
+
+Final Hybrid consists of GA candidate generation, diversity-aware Top-K selection, conversion to ALNS state, ALNS refinement, vehicle-preserving acceptance, paper-cost/ranking comparison, and final evaluator validation. Every component corresponds to an observed historical failure.
+
+| Final Hybrid component | Historical failure that motivated it | Final role |
+|---|---|---|
+| Top-K candidates | Single GA-best refinement was unstable | Test multiple promising neighborhoods |
+| Candidate diversity | Quality Top-K remained structurally similar | Expose ALNS to different route/service patterns |
+| Vehicle-preserving rule | ALNS sometimes reduced distance by adding vehicles | Prevent misleading improvement under vehicle-priority ranking |
+| Paper-cost priority | Local improvement did not always match paper objective | Align refinement acceptance with final reporting metric |
+| Stagnation/periodic tests | End-only refinement might be too late | Tested timing, then showed timing alone was not enough |
+| Hybrid-local neighborhoods | Generic ALNS could be too disruptive | Refine near GA solutions without increasing vehicles |
+
+Developmental evidence gives the causal chain. Naive Hybrid retained GA on R101-5, improved R101-10 by about 0.64%, and on R101-25 encountered the shorter-distance/higher-vehicle conflict. Top-K then selected rank-3 candidates in R101-10 and R101-25, showing GA rank was not identical to ALNS refinement potential. Vehicle-preserving refinement rejected high-vehicle short-distance candidates and accepted same-vehicle improvements in R101-10. Periodic and stagnation triggering showed that timing alone was not the bottleneck: R101-25 periodic ran about 97.2s with zero injections, and stagnation triggered but also injected zero. Hybrid-local neighborhoods then attempted safer local refinement, but Stage6 debug still showed `hybrid_topk` distance 371.125 and `hybrid_preserve` 358.810 compared with GA 349.970 under that debug setting. Finally diverse Top-K improved 10-customer debug behavior but 25-customer smoke evidence still showed Hybrid could trade fewer distance for more vehicles.
+
+Final controlled evidence confirms conditional effectiveness rather than dominance. Hybrid feasible rate is 72.222%, between GA and ALNS. Hybrid paper cost mean is 1232.753151, lower than GA 1262.172734 and ALNS 1319.028256. Hybrid wins/ties/losses are 18/5/13 against GA and 25/0/11 against ALNS. Therefore the final claim should be: Hybrid is a competitive conditional synthesis with strong paper-cost behavior and stable runtime, not a universally superior algorithm.
+
+## 12. Algorithm Development History as Causal Evidence
+
+| Stage | Method | Observed problem | Hypothesis | Modification | Experiment | Before result | After result | Observed improvement | Observed degradation | Final status |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| GA Stage 0 | GA | Customer-order-only encoding could not express truck/drone assignment, launch/recovery, charging, or multi-vehicle structure. | A richer solution representation is required before GA can search the final Truck-Drone EVRPTW-NL space. | Move from simple customer_order to structured solution with truck_routes, drone_tasks, charging_plan. | Developmental evidence - not controlled ablation | Early GA produced infeasible cases; time-window feasibility was reported around 20-40% in user-provided diagnostics. | Later GA output could represent multi-route truck-drone charging-capable solutions. | Representation no longer blocked drone/charging/multi-vehicle modeling. | Larger search space increased decoder complexity. | Superseded by final structured GA |
+| GA Stage 1-3 | GA | Drone tasks were decorative when limited to single-customer missions without station visits. | Allowing multi-customer drone_route and drone charging should make drone service a real routing decision. | Upgrade drone task to route_index + launch + drone_route + recover + customers; allow station nodes and charging_plan vehicle='drone'. | Developmental evidence - not controlled ablation | Single-customer sortie could not express realistic drone contribution. | Final raw results contain drone_tasks and truck/drone distances in 25-customer solutions. | Drone service became representable and evaluable. | Drone construction required pruning to avoid runtime explosion. | Retained in final method |
+| GA Stage 4-8 | GA | Multi-customer drone and charging search created a large candidate space and could threaten runtime. | Hierarchical pruning, evaluation cache, route rebalance, specialized mutation, route split, and diversity anchors can keep GA usable at 25/50 customers. | Add layered drone search, caching, Truck-Drone mutations, incremental vehicle expansion, route-preserving crossover, and time budget. | Developmental evidence - not controlled ablation | Unbounded drone construction risked slow or infeasible outputs. | GA development report states GA can generate feasible 25/50-customer solutions, but remains conservative. | Feasibility and scale handling improved. | Vehicles and distances can be conservative. | Retained in final GA |
+| ALNS Phase 1 | ALNS | Initial ALNS scaffold was not a real independent ALNS; it could not explain destroy/repair/local operator effects. | An explicit ALNSState and independent initial construction can make ALNS a fair standalone comparison method. | Add ALNSState, initial solution, D-Random/D-WorstTime/D-RouteRemoval/D-DroneTask, R-Regret/TW/Energy/Drone, and local operators. | Developmental evidence - not controlled ablation | Scaffold behavior was not comparable to final GA. | R101-5 True, 3 vehicles, distance 161.151, runtime 0.845s; R101-10 True, 3 vehicles, distance 240.500, runtime 5.497s; C101-5 and RC101-5 also True. | ALNS became independently runnable and feasible on small cases. | Quality and scale robustness were not yet sufficient. | Modified later |
+| ALNS layered/petal/post-stage | ALNS | ALNS was feasible but conservative; full evaluator calls and many weak operators increased runtime. | Layered candidate evaluation and targeted operators can improve distance, crossing, drone, charging, and vehicle behavior without uncontrolled runtime. | Add route merge V2, crossing removal, drone rebuild, charging cleanup, vehicle reduction, spatial/petal metrics, and quick/local/full evaluation layers. | Developmental evidence - not controlled ablation | R101-25 alns_core True, 9 vehicles, distance 710.524, runtime 47.507s, evaluator calls 965. | Later R101-25 alns_core True, 9 vehicles, distance 643.225, runtime 45.195s, crossing successes 7; post-stage alns_full True, 10 vehicles, distance 780.638, drone tasks 4 in one snapshot. | Crossing and candidate filtering could improve route structure and distance in some profiles. | Vehicle count and drone contribution remained uneven; some improvements traded distance, vehicles, and waiting. | Retained in final ALNS with limitations |
+| Hybrid Stage 1 | Hybrid | Simple GA best -> ALNS refine often failed to improve final accepted solution. | GA global search plus ALNS local refinement should be complementary. | Implement single-best post-processing from GA solution to ALNS state. | Developmental evidence - not controlled ablation | No true integration; selector simply chose GA or ALNS. | R101-5 retained GA because ALNS used more vehicles; R101-10 ALNS refine replaced GA with improvement_percentage about 0.64%; R101-25 retained GA because ALNS distance was shorter but vehicles higher. | Real conversion/refinement worked and sometimes improved. | Vehicle-count side effect blocked many refinements. | Superseded by Top-K |
+| Hybrid Stage 2-2.5 | Hybrid | GA rank-1 was not always the best ALNS starting point; ALNS could reduce distance by adding vehicles. | Diverse Top-K plus vehicle-preserving refinement improves robustness. | select_diverse_top_k and preserve_vehicle_count. | Developmental evidence - not controlled ablation | Single-best refine was blocked by vehicle increases. | R101-10 Top-K selected rank 3 GA candidate; R101-25 Top-K selected rank 3; preserve kept R101-5 and R101-25 vehicle counts while accepting same-vehicle improvement on R101-10. | Candidate choice and ranking became more defensible. | Preserve rule can reject distance gains. | Retained in final Hybrid logic |
+| Hybrid Stage 3-6 | Hybrid | Post-processing might be too late, but fixed ALNS triggering did not guarantee injection. | Periodic/stagnation ALNS and hybrid-local operators can inject improvements during candidate evolution. | Periodic elite improvement, stagnation-triggered ALNS, H-local operators. | Developmental evidence - not controlled ablation | Top-K alone could be limited. | R101-5 periodic injected 1 candidate; R101-25 periodic completed in about 97.2s but injection count was 0. Stagnation R101-10/25 triggered but injected 0. Stage6 summary: GA 100% feasible, 3.000 vehicles, distance 349.970; hybrid_topk 371.125; hybrid_preserve 358.810. | Hybrid-local successes existed but did not consistently change final solution. | Runtime increased and injection was often zero. | Supporting evidence |
+| Hybrid Stage 7-9 | Hybrid | GA candidate pool was too homogeneous; ALNS refined similar neighborhoods. | Multi-type high-diversity candidates plus paper-cost priority can give ALNS better starts and make final ranking consistent. | distance/vehicle/TW/drone/charging/petal/balanced candidate types, hybrid_diverse_topk, paper_cost_priority. | Developmental evidence plus final controlled evidence | C101-10 hybrid_diverse_topk once had about 532s runtime before fix. | Debug: hybrid_diverse_topk 100% feasible, 2.667 vehicles, distance 344.074, paper cost 494.442, runtime 4.584s; final 108-run matrix retained for controlled conclusions. | Diverse Hybrid became the final method and fixed a major runtime pathology in debug. | 25-customer smoke: Hybrid had 7 vehicles and distance 812.254 vs GA 7 vehicles and 810.202 in one case; final audit kept non-dominance caution. | Retained in final Hybrid |
+| Petal/spatial development | GA/ALNS/Hybrid metrics | Distance and vehicle count alone did not describe route shape; routes could cross or overlap spatially. | Petal/spatial soft metrics help diagnose and guide route quality without becoming hard constraints. | Add petal_score, crossing_count, route_compactness, sector_coherence, depot_radial_consistency. | Developmental evidence - not controlled ablation | R101-25 alns_core crossing_count 19 and petal_score 967.846 in one report. | Updated alns_full snapshot showed crossing_count 8 and petal_score 411.927 but vehicle_count 10 and distance 780.638. | Spatial quality improved in some snapshots. | Better spatial shape can trade off against vehicles or distance. | Retained as soft metric/diagnostic |
+
+This matrix is developmental evidence. It explains design decisions but does not replace the controlled 108-run experiment. Its most important lesson is that each final component was introduced after a concrete failure: route representation after expression limits, constraint-aware decoding after feasibility failures, drone charging after decorative drone tasks, layered evaluation after runtime pressure, vehicle preservation after ALNS vehicle inflation, and diverse Top-K after Hybrid candidate homogeneity.
+
+## 13. Experimental Design and Data Quality
+
+The formal main experiment is the final 25-customer matrix: C101/R101/RC101, methods GA/ALNS/Hybrid, charging policies LFC/LPC/NFC/NPC, seeds 1987/42/128, station count 8, and nominal time budget 90s, for 108 runs if the CSV is complete. Supporting experiments at 5/10/25/50 customers are used for mechanism validation and method development, not mixed into final averages. Truck-only OR-Tools/PyVRP references remain historical because they do not solve the complete Truck-Drone EVRPTW-NL.
+
+Data quality issues are retained rather than deleted:
 
 | detected issue | affected rows | whether corrected | correction rule |
 | --- | --- | --- | --- |
@@ -346,90 +155,71 @@ Final Hybrid uses diverse GA candidate generation, Top-K diversity selection, co
 | runtime > 500s | 4 | not corrected | Outliers retained. |
 | feasible-total_violation inconsistency | 0 | not corrected | Reported only. |
 
-## 16. Statistical Rules
+## 14. RQ1 Constraint Adaptation Evidence
 
-Feasible rate uses all runs. Vehicle count, distance, charging, waiting, completion, and paper cost are reported mainly on feasible-only rows. Runtime uses all rows. Outliers and infeasible rows are retained. Historical truck-only results are not mixed into final Truck-Drone averages.
+Early state: feasibility was heavily downstream. Generic customer ordering and generic destroy/repair could create routes, but many Truck-Drone EVRPTW-NL constraints were only discovered during simulation/evaluation. Developmental evidence includes early GA time-window failures and ALNS scaffold limitations. This motivated moving constraints inside search: GA added service modes, route splits, drone priorities, and TW/Energy/Charging/Sync-aware decoding; ALNS added explicit state, problem-aware operators, and layered feasibility estimation; Hybrid added vehicle-preserving and paper-cost aligned acceptance.
 
-## 17. RQ1 Constraint Adaptation Evidence
+Final state: the shared evaluator still remains the final hard-feasibility judge. That is important. The algorithms do not replace simulator verification; they generate better candidates before verification. The research implication is mechanism-supported rather than purely statistical: moving constraint awareness inside search improves method independence and makes Hybrid complementarity possible. However, because not every development stage is a controlled ablation, this should be written as a design-supported conclusion, not as a theorem.
 
-All final methods produce a shared solution schema and pass through the same simulator/evaluator. GA adapts mainly through constraint-aware construction. ALNS adapts through state-level destroy/repair/local operators. Hybrid adapts through diverse candidate generation, ALNS state conversion, and vehicle-preserving refinement.
+## 15. RQ2 Overall Algorithm Behavior
 
-## 18. RQ2 Overall Algorithm Behavior
-
-| method | runs | feasible_rate | feasible_vehicle_count_mean | feasible_total_distance_mean | feasible_truck_distance_mean | feasible_drone_distance_mean | feasible_completion_time_mean | feasible_charging_time_mean | feasible_waiting_time_mean | feasible_paper_cost_mean | runtime_median | runtime_max |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| ALNS | 36 | 75.0 | 8.888889 | 874.735865 | 800.865731 | 73.870134 | 353.255505 | 137.720392 | 1114.748686 | 1319.028256 | 90.529717 | 10929.261842 |
-| GA | 36 | 66.667 | 7.666667 | 906.231298 | 804.239413 | 101.991886 | 379.337941 | 170.940348 | 683.615107 | 1262.172734 | 76.122086 | 10922.699444 |
-| Hybrid | 36 | 72.222 | 7.884615 | 891.437547 | 786.474962 | 104.962585 | 362.986364 | 156.253175 | 684.790325 | 1232.753151 | 63.404685 | 73.821376 |
-
-![Paper cost distribution](../results/paper_figures_v2/D1_paper_cost_distribution.png)
-
-![Vehicle-distance trade-off](../results/paper_figures_v2/D2_vehicle_count_vs_total_distance.png)
-
-## 19. RQ3 Instance Sensitivity
-
-| source_instance | method | runs | feasible_rate | feasible_vehicle_count_mean | feasible_total_distance_mean | feasible_paper_cost_mean | runtime_mean |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| C101 | ALNS | 12 | 33.333 | 9.0 | 1056.818485 | 2616.060205 | 997.810454 |
-| C101 | GA | 12 | 33.333 | 5.75 | 1094.484442 | 1999.379462 | 73.002336 |
-| C101 | Hybrid | 12 | 33.333 | 5.5 | 1088.223049 | 2007.170985 | 63.488062 |
-| R101 | ALNS | 12 | 100.0 | 9.583333 | 782.233274 | 1027.033111 | 90.437677 |
-| R101 | GA | 12 | 66.667 | 8.25 | 777.78524 | 1020.995354 | 984.440674 |
-| R101 | Hybrid | 12 | 83.333 | 8.8 | 814.379064 | 1039.55973 | 63.640798 |
-| RC101 | ALNS | 12 | 91.667 | 8.090909 | 909.43592 | 1165.920433 | 281.653678 |
-| RC101 | GA | 12 | 100.0 | 7.916667 | 929.110956 | 1177.222078 | 149.476907 |
-| RC101 | Hybrid | 12 | 100.0 | 7.916667 | 890.057783 | 1135.608391 | 61.044957 |
-
-![Instance heatmap](../results/paper_figures_v2/C2_method_instance_feasibility_heatmap.png)
-
-## 20. RQ4 Charging Policy Analysis
-
-| charging_policy | policy_family | method | runs | feasible_rate | feasible_charging_time_mean | feasible_completion_time_mean | feasible_total_distance_mean | feasible_paper_cost_mean | runtime_mean |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| LFC | Linear / Full | ALNS | 9 | 77.778 | 166.309045 | 347.996813 | 883.476187 | 1345.546328 | 90.633511 |
-| LFC | Linear / Full | GA | 9 | 66.667 | 200.75867 | 375.692237 | 918.289716 | 1274.279824 | 182.508805 |
-| LFC | Linear / Full | Hybrid | 9 | 66.667 | 157.639818 | 373.191635 | 875.013361 | 1205.885795 | 61.55694 |
-| LPC | Linear / Partial | ALNS | 9 | 77.778 | 80.751952 | 343.707607 | 883.501689 | 1267.473768 | 90.556759 |
-| LPC | Linear / Partial | GA | 9 | 66.667 | 110.420603 | 374.745151 | 909.184741 | 1240.383916 | 73.030853 |
-| LPC | Linear / Partial | Hybrid | 9 | 77.778 | 97.579998 | 346.082273 | 897.990784 | 1194.859496 | 64.210524 |
-| NFC | Nonlinear / Full | ALNS | 9 | 66.667 | 242.731195 | 380.916144 | 849.55962 | 1422.167524 | 1294.781204 |
-| NFC | Nonlinear / Full | GA | 9 | 66.667 | 248.166275 | 392.378315 | 871.686244 | 1319.676731 | 1279.066011 |
-| NFC | Nonlinear / Full | Hybrid | 9 | 66.667 | 287.641738 | 393.434386 | 894.485362 | 1361.623411 | 62.656817 |
-| NPC | Nonlinear / Partial | ALNS | 9 | 77.778 | 76.090921 | 344.352976 | 878.809357 | 1255.659586 | 350.56427 |
-| NPC | Nonlinear / Partial | GA | 9 | 66.667 | 124.415843 | 374.536061 | 925.764491 | 1214.350464 | 74.620886 |
-| NPC | Nonlinear / Partial | Hybrid | 9 | 77.778 | 101.119031 | 345.044777 | 896.349772 | 1183.215746 | 62.474142 |
-
-![Charging policy impact](../results/paper_figures_v2/F1_charging_policy_2x2.png)
-
-## 21. RQ5 Hybrid Effectiveness
-
-| source_instance | charging_policy | runs | feasible_rate | candidate_count_mean | selected_candidate_count_mean | alns_improved_candidates_mean | best_improvement_percentage_mean | paper_cost_before_mean | paper_cost_after_mean | selected_candidate_types |
+| method | runs | feasible_rate | feasible_vehicle_count_mean | feasible_total_distance_mean | feasible_charging_time_mean | feasible_waiting_time_mean | feasible_paper_cost_mean | runtime_median | runtime_mean | runtime_max |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| R101 | LFC | 3 | 66.667 | 15.0 | 3.0 | 1.666667 | 31.762425 | 1114.114105 | 1081.345784 | drone_aggressive,balanced,vehicle_oriented;time_window_oriented,balanced,vehicle_oriented;vehicle_oriented,balanced,time_window_oriented |
-| R101 | LPC | 3 | 100.0 | 13.666667 | 3.0 | 1.666667 | 33.282005 | 1040.535136 | 1019.098831 | distance_oriented,vehicle_oriented,balanced;drone_aggressive,balanced,time_window_oriented;vehicle_oriented,petal_oriented,drone_aggressive |
-| R101 | NFC | 3 | 66.667 | 15.0 | 3.0 | 2.0 | 26.336414 | 1187.183989 | 1189.923087 | drone_aggressive,vehicle_oriented,distance_oriented;drone_aggressive,vehicle_oriented,drone_conservative;vehicle_oriented,balanced,charging_oriented |
-| R101 | NPC | 3 | 100.0 | 13.0 | 3.0 | 2.0 | 33.598582 | 1064.758765 | 984.898053 | drone_aggressive,balanced,distance_oriented;time_window_oriented,balanced,vehicle_oriented;vehicle_oriented,drone_aggressive,balanced |
-| C101 | LFC | 3 | 33.333 | 13.0 | 3.0 | 0.666667 | 61.501346 | 1637.679731 | 1698.601102 | time_window_oriented,balanced,drone_aggressive;vehicle_oriented,distance_oriented,balanced;vehicle_oriented,time_window_oriented,balanced |
-| C101 | LPC | 3 | 33.333 | 15.0 | 3.0 | 0.333333 | 14.850938 | 1703.822586 | 1740.45974 | balanced,time_window_oriented,distance_oriented;drone_aggressive,vehicle_oriented,charging_oriented;drone_conservative,drone_aggressive,balanced |
-| C101 | NFC | 3 | 33.333 | 15.0 | 3.0 | 0.666667 | 63.403084 | 1864.683099 | 2032.040715 | time_window_oriented,balanced,drone_aggressive;vehicle_oriented,balanced,drone_aggressive;vehicle_oriented,balanced,time_window_oriented |
-| C101 | NPC | 3 | 33.333 | 17.0 | 3.0 | 0.666667 | 44.828295 | 1682.0394 | 1710.157219 | drone_aggressive,vehicle_oriented,balanced;drone_conservative,balanced,drone_aggressive;vehicle_oriented,drone_conservative,balanced |
-| RC101 | LFC | 3 | 100.0 | 16.0 | 3.0 | 2.0 | 3.443179 | 1135.73918 | 1067.165347 | balanced,drone_aggressive,vehicle_oriented;balanced,time_window_oriented,vehicle_oriented;drone_conservative,balanced,charging_oriented |
-| RC101 | LPC | 3 | 100.0 | 15.333333 | 3.0 | 0.666667 | 0.000612 | 1056.59957 | 1055.462323 | balanced,drone_conservative,distance_oriented;balanced,time_window_oriented,distance_oriented;drone_conservative,charging_oriented,drone_aggressive |
-| RC101 | NFC | 3 | 100.0 | 16.0 | 3.0 | 2.0 | 2.374188 | 1317.871942 | 1299.988794 | drone_conservative,balanced,time_window_oriented;petal_oriented,vehicle_oriented,drone_conservative;time_window_oriented,vehicle_oriented,distance_oriented |
-| RC101 | NPC | 3 | 100.0 | 16.0 | 3.0 | 0.666667 | 0.0 | 1119.8171 | 1119.8171 | balanced,drone_conservative,distance_oriented;drone_conservative,distance_oriented,balanced;drone_conservative,drone_aggressive,time_window_oriented |
+| ALNS | 36 | 75.0 | 8.888889 | 874.735865 | 137.720392 | 1114.748686 | 1319.028256 | 90.529717 | 456.633936 | 10929.261842 |
+| GA | 36 | 66.667 | 7.666667 | 906.231298 | 170.940348 | 683.615107 | 1262.172734 | 76.122086 | 402.306639 | 10922.699444 |
+| Hybrid | 36 | 72.222 | 7.884615 | 891.437547 | 156.253175 | 684.790325 | 1232.753151 | 63.404685 | 62.724606 | 73.821376 |
+
+**Controlled final evidence.** ALNS has the highest feasible rate (75.0%), GA has the lowest feasible vehicle count (7.666667), ALNS has the shortest total distance (874.735865), and Hybrid has the lowest paper cost (1232.753151) and most stable runtime. These patterns follow the development history. GA's constructive decoder and vehicle-aware route splitting bias it toward fewer vehicles. ALNS's local route restructuring biases it toward shorter distance and higher feasibility but can increase vehicle count. Hybrid's paper-cost alignment and vehicle-preserving rule were designed exactly because earlier Hybrid stages exposed vehicle-distance conflicts.
+
+Counter-evidence matters. Hybrid does not have the best feasible rate, the fewest vehicles, or the shortest distance. Therefore the correct conclusion is not `Hybrid dominates`; it is that Hybrid combines competitive solution quality with lower runtime variance and lower average paper cost under the final ranking.
+
+## 16. RQ3 Instance Sensitivity
+
+| source_instance | method | runs | feasible_runs | feasible_rate | infeasible_runs | feasible_vehicle_count_mean | feasible_vehicle_count_median | feasible_vehicle_count_std | feasible_total_distance_mean | feasible_total_distance_median | feasible_total_distance_std | feasible_truck_distance_mean | feasible_truck_distance_median | feasible_truck_distance_std | feasible_drone_distance_mean | feasible_drone_distance_median | feasible_drone_distance_std | feasible_completion_time_mean | feasible_completion_time_median | feasible_completion_time_std | feasible_charging_count_mean | feasible_charging_count_median | feasible_charging_count_std | feasible_charging_time_mean | feasible_charging_time_median | feasible_charging_time_std | feasible_waiting_time_mean | feasible_waiting_time_median | feasible_waiting_time_std | feasible_truck_waiting_time_mean | feasible_truck_waiting_time_median | feasible_truck_waiting_time_std | feasible_drone_waiting_time_mean | feasible_drone_waiting_time_median | feasible_drone_waiting_time_std | feasible_petal_score_mean | feasible_petal_score_median | feasible_petal_score_std | feasible_crossing_count_mean | feasible_crossing_count_median | feasible_crossing_count_std | feasible_paper_cost_mean | feasible_paper_cost_median | feasible_paper_cost_std | runtime_mean | runtime_median | runtime_std | runtime_max | runtime_gt_500_count | runtime_gt_1000_count |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| C101 | ALNS | 12 | 4 | 33.333 | 8 | 9.0 | 9.0 | 0.0 | 1056.818485 | 1058.851069 | 15.393399 | 974.335976 | 977.738435 | 15.552481 | 82.48251 | 83.852385 | 2.73975 | 1098.540926 | 1098.540926 | 0.0 | 11.25 | 11.5 | 3.201562 | 269.844498 | 238.971975 | 127.191769 | 4539.629881 | 4562.304258 | 68.979285 | 3921.670878 | 3944.345255 | 68.979285 | 617.959003 | 617.959003 | 0.0 | 964.302393 | 900.374197 | 191.287211 | 18.75 | 17.5 | 3.774917 | 2616.060205 | 2601.441167 | 103.521097 | 997.810454 | 91.100706 | 3127.622727 | 10929.261842 | 1 | 1 |
+| C101 | GA | 12 | 4 | 33.333 | 8 | 5.75 | 6.0 | 0.5 | 1094.484442 | 1119.745399 | 54.060522 | 912.72603 | 919.925111 | 63.427977 | 181.758411 | 155.016622 | 64.162513 | 1101.743772 | 1102.811388 | 2.135231 | 12.5 | 12.0 | 2.645751 | 346.960727 | 331.658069 | 106.752543 | 1995.472884 | 1926.529087 | 225.139112 | 1759.208597 | 1836.185255 | 168.684764 | 236.264287 | 70.150568 | 384.722148 | 1379.127988 | 1370.391326 | 332.051957 | 26.75 | 26.5 | 6.652067 | 1999.379462 | 1996.810027 | 116.725121 | 73.002336 | 72.301811 | 17.043708 | 95.948919 | 0 | 0 |
+| C101 | Hybrid | 12 | 4 | 33.333 | 8 | 5.5 | 5.5 | 0.57735 | 1088.223049 | 1094.915896 | 50.923112 | 853.657205 | 869.933013 | 88.892709 | 234.565843 | 237.048399 | 89.862225 | 1102.811388 | 1102.811388 | 0.0 | 11.25 | 11.5 | 2.061553 | 312.003117 | 280.418283 | 123.057804 | 2090.113044 | 2088.126321 | 214.474588 | 1752.446814 | 1778.361235 | 196.477461 | 337.66623 | 272.954454 | 403.969818 | 1223.315032 | 1302.328964 | 447.065282 | 23.5 | 25.0 | 8.962886 | 2007.170985 | 1971.865014 | 89.744385 | 63.488062 | 63.441074 | 5.108074 | 73.30088 | 0 | 0 |
+| R101 | ALNS | 12 | 12 | 100.0 | 0 | 9.583333 | 10.0 | 0.514929 | 782.233274 | 778.51378 | 34.062 | 696.979144 | 678.394644 | 56.644102 | 85.25413 | 96.420389 | 44.418408 | 210.442636 | 212.263362 | 12.840739 | 3.5 | 3.0 | 1.445998 | 77.238857 | 53.955169 | 53.820774 | 657.385572 | 692.137567 | 164.521189 | 644.527228 | 692.137567 | 151.121358 | 12.858344 | 0.0 | 27.755376 | 646.70632 | 610.175152 | 228.33284 | 12.666667 | 12.0 | 4.53939 | 1027.033111 | 1011.127137 | 51.867869 | 90.437677 | 90.359068 | 0.411141 | 91.442813 | 0 | 0 |
+| R101 | GA | 12 | 8 | 66.667 | 4 | 8.25 | 8.5 | 0.886405 | 777.78524 | 766.008996 | 52.19677 | 670.863732 | 660.926768 | 63.310834 | 106.921509 | 104.397188 | 93.016804 | 221.356686 | 219.041631 | 7.403451 | 4.125 | 4.0 | 0.991031 | 95.472886 | 93.245536 | 51.731753 | 577.031342 | 553.578149 | 73.917305 | 563.113771 | 534.389421 | 81.388923 | 13.91757 | 0.0 | 31.761841 | 928.495492 | 749.597769 | 506.458719 | 18.125 | 14.5 | 10.119818 | 1020.995354 | 991.894894 | 59.563598 | 984.440674 | 87.413971 | 3129.768372 | 10922.699444 | 1 | 1 |
+| R101 | Hybrid | 12 | 10 | 83.333 | 2 | 8.8 | 9.0 | 1.032796 | 814.379064 | 820.813016 | 72.437473 | 702.602054 | 696.841327 | 80.048638 | 111.77701 | 109.877505 | 96.667775 | 213.073111 | 215.373714 | 14.501623 | 4.9 | 5.0 | 2.078995 | 84.373407 | 61.542254 | 58.581484 | 558.884263 | 564.8124 | 110.982025 | 554.539492 | 547.694107 | 108.935516 | 4.344772 | 0.0 | 9.986547 | 979.992049 | 898.585937 | 299.585335 | 19.1 | 17.5 | 5.989806 | 1039.55973 | 1010.121615 | 107.027294 | 63.640798 | 63.733504 | 4.421513 | 69.323954 | 0 | 0 |
+| RC101 | ALNS | 12 | 11 | 91.667 | 1 | 8.090909 | 8.0 | 0.700649 | 909.43592 | 924.840228 | 73.629384 | 851.116463 | 869.919655 | 64.291133 | 58.319457 | 61.420922 | 29.62705 | 238.038482 | 233.520027 | 15.079344 | 6.181818 | 7.0 | 1.88776 | 155.65512 | 117.376227 | 107.46053 | 368.278921 | 378.983692 | 93.957927 | 333.240266 | 306.186105 | 109.219212 | 35.038655 | 3.54102 | 53.247504 | 528.786444 | 567.087553 | 229.701031 | 10.272727 | 11.0 | 4.540725 | 1165.920433 | 1093.080516 | 145.675259 | 281.653678 | 90.190632 | 662.257111 | 2384.601612 | 1 | 1 |
+| RC101 | GA | 12 | 12 | 100.0 | 0 | 7.916667 | 8.0 | 0.792961 | 929.110956 | 923.358632 | 66.715208 | 856.994327 | 873.670032 | 59.001263 | 72.116628 | 59.159599 | 59.403963 | 243.856834 | 242.45571 | 18.027753 | 6.583333 | 7.0 | 2.274696 | 162.57853 | 154.031932 | 65.460157 | 317.385025 | 291.039793 | 134.191301 | 292.63968 | 291.039793 | 107.245973 | 24.745345 | 0.0 | 46.143354 | 367.028454 | 368.378599 | 102.536658 | 7.0 | 7.0 | 2.044949 | 1177.222078 | 1211.219104 | 122.393649 | 149.476907 | 61.442232 | 294.818908 | 1083.48245 | 1 | 1 |
+| RC101 | Hybrid | 12 | 12 | 100.0 | 0 | 7.916667 | 8.0 | 0.668558 | 890.057783 | 864.521232 | 74.842267 | 833.974972 | 826.846009 | 31.26539 | 56.082811 | 33.796906 | 70.501426 | 241.305735 | 237.713551 | 18.94838 | 6.25 | 6.5 | 1.864745 | 164.236333 | 127.797937 | 86.944973 | 321.271138 | 323.695136 | 95.914488 | 317.285178 | 323.695136 | 93.539442 | 3.98596 | 0.0 | 9.388706 | 351.858538 | 318.765231 | 152.102564 | 6.75 | 6.0 | 3.048845 | 1135.608391 | 1083.95923 | 130.874021 | 61.044957 | 59.834212 | 8.109481 | 73.821376 | 0 | 0 |
+
+C101 is the critical family because final evidence reports low feasibility across methods in that structure. Development logs also contain runtime and candidate-search difficulty around C101, including the C101-10 `hybrid_diverse_topk` runtime pathology before budget fixes. The plausible mechanism is that clustered/time-window structure can narrow feasible insertion positions and amplify waiting/charging consequences. This is an interpretive inference, not a fully verified causal proof, because the current report does not include a complete per-violation C101 diagnostic decomposition for all 108 final runs. The correct paper wording should therefore distinguish observed evidence from unverified mechanism.
+
+## 17. RQ4 Charging Policy Analysis
+
+| method | charging_policy | runs | feasible_rate | feasible_charging_time_mean | feasible_completion_time_mean | feasible_paper_cost_mean | runtime_median |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| ALNS | LFC | 9 | 77.778 | 166.309045 | 347.996813 | 1345.546328 | 90.491424 |
+| GA | LFC | 9 | 66.667 | 200.75867 | 375.692237 | 1274.279824 | 71.003212 |
+| Hybrid | LFC | 9 | 66.667 | 157.639818 | 373.191635 | 1205.885795 | 62.854488 |
+| ALNS | LPC | 9 | 77.778 | 80.751952 | 343.707607 | 1267.473768 | 90.493707 |
+| GA | LPC | 9 | 66.667 | 110.420603 | 374.745151 | 1240.383916 | 64.859852 |
+| Hybrid | LPC | 9 | 77.778 | 97.579998 | 346.082273 | 1194.859496 | 65.494222 |
+| ALNS | NFC | 9 | 66.667 | 242.731195 | 380.916144 | 1422.167524 | 90.404375 |
+| GA | NFC | 9 | 66.667 | 248.166275 | 392.378315 | 1319.676731 | 82.295583 |
+| Hybrid | NFC | 9 | 66.667 | 287.641738 | 393.434386 | 1361.623411 | 61.427072 |
+| ALNS | NPC | 9 | 77.778 | 76.090921 | 344.352976 | 1255.659586 | 90.798352 |
+| GA | NPC | 9 | 66.667 | 124.415843 | 374.536061 | 1214.350464 | 78.539776 |
+| Hybrid | NPC | 9 | 77.778 | 101.119031 | 345.044777 | 1183.215746 | 63.190038 |
+
+The final charging result is consistent with the mathematical mechanism and development history. Partial charging lowers charging time for all three methods: ALNS LFC/LPC = 166.309/80.752 and NFC/NPC = 242.731/76.091; GA LFC/LPC = 200.759/110.421 and NFC/NPC = 248.166/124.416; Hybrid LFC/LPC = 157.640/97.580 and NFC/NPC = 287.642/101.119. Full nonlinear charging is costly because it can push charging into high-SOC slow segments. NPC avoids part of that penalty by charging only to a required target. Developmental evidence explains why charging-aware operators and charging-plan fields were introduced, but final evidence shows the dominant policy effect comes from full vs partial more clearly than from a single algorithm's charging operator success.
+
+## 18. RQ5 Hybrid Effectiveness
 
 | method | vs | wins | ties | losses | feasible_paired_delta_paper_cost_mean | feasible_paired_delta_paper_cost_median |
 | --- | --- | --- | --- | --- | --- | --- |
 | Hybrid | GA | 18 | 5 | 13 | -15.170217 | -6.00501 |
 | Hybrid | ALNS | 25 | 0 | 11 | -111.195871 | -34.200711 |
 
-Hybrid is useful when diverse GA candidates give ALNS a refinable structure. It fails when refinement increases vehicles, remains infeasible, or does not improve the selected ranking. This is a negative result to preserve, not hide.
+Hybrid effectiveness is the point where development and final evidence meet. Naive Hybrid failed to prove automatic synergy. Top-K showed that GA's rank-best candidate was not always the best ALNS starting point. Vehicle-preserving refinement was introduced because ALNS could reduce distance by adding vehicles. Periodic and stagnation experiments showed that calling ALNS earlier did not solve the problem if the neighborhood or candidate diversity was insufficient. Hybrid-local operators reduced disruption but did not guarantee improvement. Diverse Top-K finally addressed candidate homogeneity.
 
-![Hybrid WTL](../results/paper_figures_v2/E1_hybrid_win_tie_loss.png)
+Final paired evidence supports a conditional claim: Hybrid beats GA in 18 matched cases, ties 5, and loses 13; Hybrid beats ALNS in 25 and loses 11. Its average paired paper-cost delta is negative against both GA and ALNS. But the loss counts and the 25-customer smoke case prevent an overclaim. Hybrid works when diverse GA candidates expose an ALNS-refinable neighborhood that improves paper cost without increasing vehicles. It fails when ALNS refinement conflicts with vehicle count, when candidates are too homogeneous, or when local changes improve secondary metrics but not the final ranking.
 
-![Hybrid paired delta](../results/paper_figures_v2/E2_paired_delta_paper_cost.png)
-
-## 22. RQ6 Computational Robustness
+## 19. RQ6 Computational Robustness
 
 | method | runs | runtime_median | runtime_mean | runtime_std | runtime_max | runtime_gt_500_count | runtime_gt_1000_count |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -437,97 +227,96 @@ Hybrid is useful when diverse GA candidates give ALNS a refinable structure. It 
 | ALNS | 36 | 90.529717 | 456.633936 | 1835.505163 | 10929.261842 | 2 | 2 |
 | Hybrid | 36 | 63.404685 | 62.724606 | 6.03889 | 73.821376 | 0 | 0 |
 
-### Extreme Runtime Cases
+Runtime behavior reflects development complexity. GA and ALNS both have extreme final outliers above 1000s, while Hybrid has no >500s final outliers and a runtime median of 63.404685s. This is not because Hybrid is simpler; it is because final Hybrid was forced into bounded candidate generation and refinement after development exposed runtime pathologies. More drone enumeration, charging checks, local candidates, operator loops, and full evaluator calls increase computational burden. Caching, pruning, Top-K, time budgets, and diverse but limited candidate pools were engineering responses. Extreme cases are retained as evidence of heavy-tail risk rather than removed.
 
-| instance | source_instance | customer_count | seed | method | charging_policy | truck_route | truck_routes | drone_tasks | feasible | vehicle_count | truck_distance | drone_distance | total_distance | completion_time | waiting_time | truck_waiting_time | drone_waiting_time | charging_count | charging_time | petal_score | crossing_count | route_compactness | sector_coherence | depot_radial_consistency | runtime_seconds | feasibility_rate | customer_coverage_rate | time_window_feasibility_rate | truck_battery_feasibility_rate | drone_battery_feasibility_rate | capacity_feasibility_rate | sync_feasibility_rate | total_violation | ga_before_cost | alns_after_cost | improvement_percentage | selected_source | ga_runtime | alns_refine_runtime | candidate_count | selected_candidate_count | selected_candidate_rank | selected_candidate_similarity_to_ga_best | comparison_mode | candidate_types | selected_candidate_types | ga_best_cost | candidate_before_cost | candidate_after_cost | candidate_vehicle_count_before | candidate_vehicle_count_after | alns_improved_candidates | best_improvement_percentage | per_candidate_runtime | vehicle_preserving_refine | baseline_vehicle_count | refined_vehicle_count | distance_improved | completion_time_improved | charging_time_improved | waiting_time_improved | petal_score_improved | accepted_by_hybrid_rule | rejected_reason | paper_cost_before | paper_cost_after | paper_distance_improved | paper_cost_improved | accepted_by_paper_rule | rejected_by_cost_rule | periodic_trigger_count | periodic_selected_elites | periodic_injected_count | periodic_rejected_count | periodic_best_before | periodic_best_after | stagnation_trigger_count | stagnation_selected_elites | stagnation_injected_count | stagnation_rejected_count | stagnation_immigrant_count | stagnation_best_before | stagnation_best_after | stagnation_batches | alns_called_due_to_no_improvement | alns_called_due_to_low_diversity | population_diversity_before | population_diversity_after | hybrid_local_operator_calls | hybrid_local_operator_successes | same_vehicle_relocate_successes | same_vehicle_swap_successes | no_new_vehicle_relocate_successes | drone_reassign_successes | launch_recover_adjust_successes | charging_polish_successes | waiting_reduction_successes | petal_polish_successes | accepted_same_vehicle_improvements | rejected_by_vehicle_increase | time_window_failed_nodes | truck_battery_failed_legs | drone_failed_tasks | customer_coverage_violation | time_window_violation | truck_battery_violation | drone_battery_violation | capacity_violation |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| RC101_25_seed1987_td | RC101 | 25 | 1987 | ga_td | LFC | 0 ---> 5 ---> 46 ---> 55 ---> 0 | v1:0 ---> 5 ---> 46 ---> 55 ---> 0 | v2:0 ---> 42 ---> 35 ---> 0 | v3:0 ---> 45 ---> 88 ---> 53 ---> 0 | v4:0 ---> 36 ---> 1006 ---> 34 ---> 93 ---> 0 | v5:0 ---> 59 ---> 75 ---> 1005 ---> 0 | v6:0 ---> 11 ---> 99 ---> 1002 ---> 77 ---> 0 | v7:0 ---> 19 ---> 18 ---> 49 ---> 48 ---> 1005 ---> 0 | v8:0 ---> 95 ---> 62 ---> 71 ---> 0 | v9:0 ---> 28 ---> 30 ---> 1003 ---> 0 |  | True | 9 | 964.869714 | 0.0 | 964.869714 | 249.432235 | 256.413741 | 256.413741 | 0.0 | 5 | 197.60289 | 520.35229 | 10.0 | 10.28554 | 0.526772 | 1.098917 | 1083.48245 | 100.0 | 100.0 | 100.0 | 100.0 | 100.0 | 100.0 | 100.0 | 0.0 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 |
-| R101_25_seed42_td | R101 | 25 | 42 | ga_td | NFC | 0 ---> 72 ---> 3 ---> 0 | v1:0 ---> 72 ---> 3 ---> 0 | v2:0 ---> 29 ---> 53 ---> 0 | v3:0 ---> 65 ---> 1005 ---> 0 | v4:0 ---> 83 ---> 18 ---> 13 ---> 0 | v5:0 ---> 69 ---> 85 ---> 91 ---> 0 | v6:0 ---> 36 ---> 1001 ---> 54 ---> 0 | v7:0 ---> 64 ---> 1001 ---> 0 | r1:53 ---> 97 ---> 0; r2:65 ---> 81 ---> 34 ---> 0; r0:72 ---> 2 ---> 23 ---> 3; r4:69 ---> 88 ---> 84 ---> 8 ---> 0; r3:83 ---> 98 ---> 31 ---> 13; r6:64 ---> 46 ---> 0 | False | 7 | 594.206286 | 398.789897 | 992.996183 | 197.962169 | 442.82309 | 340.440976 | 102.382114 | 3 | 163.365534 | 1148.245252 | 22.0 | 16.777959 | 1.891708 | 2.263675 | 10922.699444 | 94.666667 | 100.0 | 68.0 | 100.0 | 100.0 | 100.0 | 100.0 | 69.304372 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | 2; 8; 23; 31; 54; 84; 88; 98 |  | 72->2->23->3; 83->98->31->13; 69->88->84->8->0 | 0.0 | 69.304372 | 0.0 | 0.0 | 0.0 |
-| C101_25_seed42_td | C101 | 25 | 42 | alns_full | NFC | 0 ---> 20 ---> 35 ---> 1000 ---> 30 ---> 36 ---> 1000 ---> 50 ---> 0 | v1:0 ---> 20 ---> 35 ---> 1000 ---> 30 ---> 36 ---> 1000 ---> 50 ---> 0 | v2:0 ---> 67 ---> 1001 ---> 95 ---> 93 ---> 0 | v3:0 ---> 57 ---> 55 ---> 40 ---> 1006 ---> 59 ---> 66 ---> 0 | v4:0 ---> 96 ---> 99 ---> 1000 ---> 52 ---> 0 | v5:0 ---> 3 ---> 9 ---> 1 ---> 0 | v6:0 ---> 65 ---> 71 ---> 1007 ---> 61 ---> 0 | v7:0 ---> 90 ---> 82 ---> 91 ---> 0 |  | False | 7 | 792.28255 | 0.0 | 792.28255 | 1055.320325 | 2843.380199 | 2843.380199 | 0.0 | 6 | 304.70114 | 573.963136 | 11.0 | 14.148956 | 1.174916 | 1.042192 | 10929.261842 | 99.561404 | 100.0 | 100.0 | 97.368421 | 100.0 | 100.0 | 100.0 | 4.653332 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | r1:93->0 |  | 0.0 | 0.0 | 4.653332 | 0.0 | 0.0 |
-| RC101_25_seed42_td | RC101 | 25 | 42 | alns_full | NPC | 0 ---> 92 ---> 72 ---> 61 ---> 0 | v1:0 ---> 92 ---> 72 ---> 61 ---> 0 | v2:0 ---> 36 ---> 39 ---> 38 ---> 40 ---> 1001 ---> 0 | v3:0 ---> 5 ---> 2 ---> 8 ---> 7 ---> 1007 ---> 0 | v4:0 ---> 82 ---> 52 ---> 51 ---> 1006 ---> 91 ---> 0 | v5:0 ---> 47 ---> 1003 ---> 48 ---> 1003 ---> 0 | v6:0 ---> 62 ---> 27 ---> 1005 ---> 0 | v7:0 ---> 1003 ---> 75 ---> 97 ---> 1003 ---> 0 | v8:0 ---> 17 ---> 0 | r0:72 ---> 41 ---> 0; r1:39 ---> 44 ---> 40; r4:48 ---> 24 ---> 0 | True | 8 | 871.133393 | 99.029726 | 970.163119 | 219.334686 | 261.978721 | 245.370593 | 16.608128 | 8 | 117.376227 | 567.087553 | 11.0 | 10.267258 | 0.75829 | 0.961871 | 2384.601612 | 100.0 | 100.0 | 100.0 | 100.0 | 100.0 | 100.0 | 100.0 | 0.0 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+Extreme runtime cases:
 
-Observed evidence is limited to saved runtime fields. Without profiling, runtime causes remain plausible mechanisms rather than confirmed causes.
+| instance | source_instance | method | charging_policy | seed | runtime_seconds | feasible | vehicle_count | total_distance | paper_cost |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| RC101_25_seed1987_td | RC101 | GA | LFC | 1987 | 1083.48245 | True | 9 | 964.869714 | 1226.576039 |
+| R101_25_seed42_td | R101 | GA | NFC | 42 | 10922.699444 | False | 7 | 992.996183 | 1292.663018 |
+| C101_25_seed42_td | C101 | ALNS | NFC | 42 | 10929.261842 | False | 7 | 792.28255 | 1807.82874 |
+| RC101_25_seed42_td | RC101 | ALNS | NPC | 42 | 2384.601612 | True | 8 | 970.163119 | 1157.186058 |
 
-![Runtime boxplot](../results/paper_figures_v2/H1_runtime_log_boxplot.png)
+## 20. Supporting Experiments as Methodological Evidence
 
-![Runtime ECDF](../results/paper_figures_v2/H2_runtime_ecdf.png)
+### 20.1 5-customer mechanism validation
 
-## 23. ALNS Operator Analysis
+Developmental 5-customer runs were used to verify mechanics: feasible truck/drone route construction, charging, synchronization, and trace diagnostics. Examples include ALNS R101-5 NPC feasible with 3 vehicles, distance 161.151, and runtime 0.845s, and C101-5/RC101-5 feasible checks around 0.9-1.0s. These are not final ranking evidence; they show that the simulator/evaluator and method-specific construction could produce valid small solutions.
 
-| operator_name | operator_type | calls | accepted_results | improved_results | acceptance_rate | improvement_rate | average_runtime_weighted | effectiveness_class |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| D-DroneTask | destroy | 10701 | 8370 | 375 | 0.78217 | 0.035043 | 0.283368 | High-frequency / high-value |
-| D-WorstTime | destroy | 7530 | 4396 | 210 | 0.583798 | 0.027888 | 0.14871 | High-frequency / high-value |
-| D-ChargingCritical | destroy | 5350 | 2615 | 193 | 0.488785 | 0.036075 | 0.325508 | High-frequency / high-value |
-| D-Crossing | destroy | 4815 | 2436 | 171 | 0.505919 | 0.035514 | 0.757803 | High-frequency / high-value |
-| D-SyncCritical | destroy | 2086 | 1603 | 31 | 0.768456 | 0.014861 | 0.304434 | High-frequency / high-value |
-| D-RouteRemoval | destroy | 4225 | 3377 | 28 | 0.79929 | 0.006627 | 0.156639 | High-frequency / low-value |
-| D-AngleSector | destroy | 1498 | 938 | 27 | 0.626168 | 0.018024 | 0.363083 | High-frequency / high-value |
-| D-Cluster | destroy | 1094 | 598 | 20 | 0.546618 | 0.018282 | 10.38884 | High-frequency / high-value |
-| D-Random | destroy | 2717 | 1871 | 19 | 0.688627 | 0.006993 | 0.163954 | High-frequency / low-value |
-| LS-DroneRebuildV2 | local_search | 18998 | 18550 | 2791 | 0.976419 | 0.14691 | 0.053495 | High-frequency / high-value |
-| H-DroneReassign | local_search | 9098 | 9098 | 1433 | 1.0 | 0.157507 | 0.23665 | High-frequency / high-value |
-| LS-DroneRebuild | local_search | 7320 | 7232 | 812 | 0.987978 | 0.110929 | 0.005128 | High-frequency / high-value |
-| LS-RouteMergeV2 | local_search | 13701 | 13701 | 393 | 1.0 | 0.028684 | 1.2141 | High-frequency / high-value |
-| LS-RelocateV2 | local_search | 21738 | 21738 | 254 | 1.0 | 0.011685 | 0.040734 | High-frequency / high-value |
-| H-CrossRouteRelocateNoNewVehicle | local_search | 9098 | 9098 | 121 | 1.0 | 0.0133 | 0.00919 | High-frequency / high-value |
-| LS-CrossingRemoval | local_search | 18261 | 18261 | 65 | 1.0 | 0.003559 | 0.019963 | High-frequency / low-value |
-| LS-Relocate | local_search | 7320 | 7320 | 31 | 1.0 | 0.004235 | 0.011988 | High-frequency / low-value |
-| H-SwapSameVehicle | local_search | 9098 | 9098 | 9 | 1.0 | 0.000989 | 0.007393 | High-frequency / low-value |
-| H-RelocateSameVehicle | local_search | 9098 | 9098 | 7 | 1.0 | 0.000769 | 0.00805 | High-frequency / low-value |
-| H-LaunchRecoverAdjust | local_search | 9098 | 9098 | 1 | 1.0 | 0.00011 | 0.001167 | High-frequency / low-value |
-| LS-PetalPolish | local_search | 8574 | 8574 | 1 | 1.0 | 0.000117 | 0.005167 | High-frequency / low-value |
-| LS-ChargingCleanup | local_search | 21729 | 21729 | 0 | 1.0 | 0.0 | 0.001419 | High-frequency / low-value |
-| H-ChargingPolish | local_search | 9098 | 9098 | 0 | 1.0 | 0.0 | 0.00405 | High-frequency / low-value |
-| H-WaitingReduction | local_search | 9098 | 9098 | 0 | 1.0 | 0.0 | 0.043295 | High-frequency / low-value |
-| H-PetalPolish | local_search | 9098 | 9098 | 0 | 1.0 | 0.0 | 0.008008 | High-frequency / low-value |
-| LS-RouteMerge | local_search | 7320 | 7320 | 0 | 1.0 | 0.0 | 0.0014 | High-frequency / low-value |
-| R-TWAware | repair | 9899 | 6776 | 329 | 0.684514 | 0.033236 | 0.107647 | High-frequency / high-value |
-| R-EnergyAware | repair | 7724 | 5196 | 264 | 0.672708 | 0.034179 | 0.465045 | High-frequency / high-value |
-| R-Regret2 | repair | 9434 | 6491 | 262 | 0.688043 | 0.027772 | 1.520277 | High-frequency / high-value |
-| R-DroneAware | repair | 6170 | 3634 | 98 | 0.588979 | 0.015883 | 0.162695 | High-frequency / high-value |
-| R-VehicleReduction | repair | 2574 | 1669 | 58 | 0.648407 | 0.022533 | 0.507693 | High-frequency / high-value |
-| R-ClusterInsertion | repair | 1505 | 866 | 25 | 0.575415 | 0.016611 | 0.461027 | High-frequency / high-value |
-| R-PetalAware | repair | 1301 | 729 | 20 | 0.560338 | 0.015373 | 0.446513 | High-frequency / high-value |
-| R-SweepInsertion | repair | 1215 | 690 | 18 | 0.567901 | 0.014815 | 0.498411 | High-frequency / high-value |
-| R-ChargingAwareV2 | repair | 194 | 153 | 0 | 0.78866 | 0.0 | 0.016265 | Low-frequency / low-value |
+### 20.2 10-customer method evolution
 
-![ALNS operator effectiveness](../results/paper_figures_v2/G1_alns_operator_effectiveness_bubble.png)
+10-customer experiments exposed algorithm behavior without the runtime risk of full 25/50 runs. R101-10 Hybrid refine achieved about 0.64% improvement in one stage, Top-K later selected rank-3 candidates, and Stage6 debug showed GA distance 349.970, hybrid_topk 371.125, hybrid_preserve 358.810, hybrid_diverse_topk 344.074, and hybrid_diverse_stagnation 342.752. Because these used development configurations, they support design decisions but do not prove final superiority.
 
-## 24. Supporting 5/10-Customer Experiments
+### 20.3 25-customer development
 
-5-customer experiments validate mechanics and diagnostics. 10-customer experiments support method development. They are not the main controlled experiment.
+25-customer development was the bridge to the final experiment. It revealed the Hybrid vehicle-distance conflict: R101-25 GA had 7 vehicles and distance 810.202, while hybrid_diverse_topk had 8 vehicles and distance 771.314 in the smoke/audit case. This evidence directly motivated vehicle-preserving and paper-cost priority rules.
 
-## 25. Historical Truck-Only References
+### 20.4 50-customer stress evidence
 
-OR-Tools and PyVRP are truck-only references and are not directly comparable against complete Truck-Drone EVRPTW-NL methods.
+50-customer experiments were treated as stress/development evidence, not as the main controlled benchmark. Their value is to expose scalability and runtime behavior. They should not be averaged with the final 25-customer matrix.
 
-## 26. Representative Solutions
+## 21. Representative Solutions
 
-Representative route uses saved raw result: instance=RC101_25_seed128_td, method=hybrid_diverse_topk, policy=LFC, vehicle_count=8, drone_tasks=1.
+Route figures must come from saved raw solutions. If a particular raw result does not contain enough route/drone/charging data for reconstruction, the report should state `Route reconstruction unavailable` rather than rerunning solvers or redrawing a route by hand.
 
-![Representative Hybrid solution](../results/paper_figures_v2/I1_representative_hybrid_solution.png)
+## 22. Negative Results and Failure Analysis
 
-## 27. Negative Results and Failure Analysis
+### Hybrid non-dominance
 
-Hybrid non-dominance, infeasible runs, ineffective operators, vehicle-distance conflict, and runtime outliers are evidence. The correct structure is Evidence -> Mechanism -> Limitation -> Design implication. The final paper should not claim Hybrid always wins.
+Final W/T/L and development stages both show non-dominance. Naive refinement often retained GA; periodic/stagnation triggered ALNS but often injected zero; Stage6 local refinement did not consistently outperform GA. Final evidence still has 13 Hybrid losses against GA. Lesson: complementarity requires structural diversity and aligned acceptance, not just serial composition.
 
-## 28. Discussion
+### Vehicle-distance conflict
 
-GA's strength is stable constraint-aware construction. ALNS's strength is explicit neighborhood search and diagnostics. Hybrid's strength is conditional synergy through diverse starts and ALNS refinement; its weakness is that complementarity does not guarantee accepted improvement. Charging policies and instance structures change the search landscape, so no universal winner should be asserted.
+Development warning: ALNS sometimes reduced distance by increasing vehicles. Final manifestation: ALNS has the shortest distance but highest vehicle count. Design response: vehicle-preserving Hybrid refinement. Limitation: preserving vehicles can reject legitimate distance improvements.
 
-## 29. Limitations
+### Ineffective ALNS operators
 
-- 25 customers is the main formal scale; 50 customers is not a hard conclusion here.
-- OR-Tools and PyVRP are not complete-model competitors.
-- Truck and drone both use Euclidean distance.
-- No road-network, airspace, wind, weather, no-fly zones, or cross-truck drone recovery are modeled.
-- Charging curves are segmented approximations.
-- No global optimality proof is provided.
-- Hybrid does not have stable dominance on every metric.
-- Runtime outliers are retained, but root causes are not proven without profiling.
+Some operators were added for valid reasons but showed limited improvement. This is not a failure to hide; it identifies a narrow feasible neighborhood and objective mismatch. Operators should be discussed by motivation, tested diagnostic outcome, and final interpretation.
 
-## 30. Research Contributions
+### Runtime pathology
+
+The C101-10 ~532s development runtime and final GA/ALNS >1000s outliers show that runtime risk existed before and survived into the final experiment for standalone methods. Hybrid's bounded runtime is a design achievement, but not proof of superior solution quality.
+
+### Early repair/evaluator dependence
+
+Early dependence on shared evaluator/repair reduced method differentiation. This explains why the project moved toward constraint-aware decoders, states, and operators. It is also a warning for future work: if feasibility mostly comes from a shared downstream repair, algorithm comparison becomes less meaningful.
+
+## 23. Discussion
+
+### 23.1 Constraint-aware search matters
+
+The development history and final results together support the central argument. Generic routing operators were insufficient because Truck-Drone EVRPTW-NL constraints are coupled. Moving constraint awareness into GA decoding and ALNS operators made the methods more independent and interpretable, even though the evaluator remains the final judge.
+
+### 23.2 Search bias differs by method
+
+GA is construction-biased and tends to preserve fewer vehicles. ALNS is local-restructuring-biased and tends to improve feasibility/distance but can use more vehicles. Hybrid is synthesis-biased: it can improve paper cost when candidate diversity and vehicle-preserving refinement align, but it does not dominate all metrics.
+
+### 23.3 Hybridization requires structural complementarity
+
+The project spent many stages on Hybrid because the theoretical complementarity is real: GA supplies global population diversity, ALNS supplies local restructuring. The evidence shows that this complementarity is conditional. If GA candidates are homogeneous or ALNS neighborhoods conflict with the ranking, Hybrid becomes equal to GA or worse. This is why final Hybrid emphasizes diverse candidate types and paper-cost aligned acceptance.
+
+### 23.4 Candidate quality vs candidate diversity
+
+Development results showed that the GA-best candidate is not always the best ALNS start, and quality Top-K is not enough if structures are similar. Diverse Top-K is therefore not a cosmetic addition; it is the final response to the observed failure mode that ALNS had no useful neighborhood to exploit.
+
+### 23.5 Charging changes the search landscape
+
+Partial charging reduces charging time across methods, and nonlinear full charging tends to be costly. This changes not only charging metrics but also time-window and completion behavior because charging time propagates through routes and synchronization.
+
+### 23.6 Development and final evidence can disagree
+
+Some debug-stage improvements did not become final dominance. That is normal in heuristic research: small controlled mechanics can validate an idea, while larger formal matrices test robustness. The report should present these contradictions as scientific evidence, not as embarrassment.
+
+### 23.7 Negative results as design knowledge
+
+Ineffective operators, vehicle-distance conflict, Hybrid losses, C101 difficulty, and runtime tails all provide design knowledge. They define where the current frozen method is reliable and where future work should focus.
+
+## 24. Limitations
+
+The main formal scale is 25 customers. 50-customer evidence is stress/developmental. OR-Tools and PyVRP are truck-only references, not complete-model competitors. Truck and drone use Euclidean distance; road networks, airspace, wind, no-fly zones, and cross-truck drone recovery are not modeled. Charging curves are engineering approximations. No global optimality is proven. Hybrid is competitive but not universally dominant. Runtime outliers remain and are retained.
+
+## 25. Contribution-Evidence Mapping
 
 | Contribution | RQ | Evidence | Table/Figure | Limitation |
 | --- | --- | --- | --- | --- |
@@ -538,68 +327,22 @@ GA's strength is stable constraint-aware construction. ALNS's strength is explic
 | Charging policy analysis | RQ4 | charging.py and final 108 rows | 2x2 charging figure | segmented approximation |
 | Runtime robustness analysis | RQ6 | runtime fields | runtime ECDF/outlier table | no profiling proof |
 
-## 31. Paper Positioning
+## 26. References
 
-Recommended narrative: present a unified Truck-Drone EVRPTW-NL computational model and a feasibility-first comparison of constraint-aware GA, independent ALNS, and diverse Top-K Hybrid. Hybrid can be a main method only if the final tables show competitive feasibility and lower paper cost; otherwise it should be positioned as a conditional enhancement and negative-result analysis.
+References are maintained in `references.bib` and `reference_gaps.md`. Items still marked `[REFERENCE NEEDED]` require manual bibliographic verification before submission.
 
-## 32. References
+## 27. Integrated Completion Audit
 
-- [Solomon1987] Solomon VRPTW benchmark. [REFERENCE NEEDED]
-- [Schneider2014] The Electric Vehicle-Routing Problem with Time Windows and Recharging Stations.
-- [ETRD-NL] ETRD-NL paper. [REFERENCE NEEDED]
-- [ALNS] Adaptive Large Neighborhood Search literature. [REFERENCE NEEDED]
-- [GA] Genetic algorithms for routing. [REFERENCE NEEDED]
-- [TruckDrone] Truck-drone routing literature. [REFERENCE NEEDED]
-- [EVCharging] Nonlinear and partial charging literature. [REFERENCE NEEDED]
-
-## Appendix A. Figure Inventory
-
-| Figure | Path |
-| --- | --- |
-| A1_problem_schematic.png | D:/学习/FURP/VRP_project/TruckDrone_EVRPTW_NL/results/paper_figures_v2/A1_problem_schematic.png |
-| A2_charging_mechanism.png | D:/学习/FURP/VRP_project/TruckDrone_EVRPTW_NL/results/paper_figures_v2/A2_charging_mechanism.png |
-| C1_overall_feasibility_by_method.png | D:/学习/FURP/VRP_project/TruckDrone_EVRPTW_NL/results/paper_figures_v2/C1_overall_feasibility_by_method.png |
-| C2_method_instance_feasibility_heatmap.png | D:/学习/FURP/VRP_project/TruckDrone_EVRPTW_NL/results/paper_figures_v2/C2_method_instance_feasibility_heatmap.png |
-| C3_method_policy_feasibility_heatmap.png | D:/学习/FURP/VRP_project/TruckDrone_EVRPTW_NL/results/paper_figures_v2/C3_method_policy_feasibility_heatmap.png |
-| D1_paper_cost_distribution.png | D:/学习/FURP/VRP_project/TruckDrone_EVRPTW_NL/results/paper_figures_v2/D1_paper_cost_distribution.png |
-| D2_vehicle_count_vs_total_distance.png | D:/学习/FURP/VRP_project/TruckDrone_EVRPTW_NL/results/paper_figures_v2/D2_vehicle_count_vs_total_distance.png |
-| E1_hybrid_win_tie_loss.png | D:/学习/FURP/VRP_project/TruckDrone_EVRPTW_NL/results/paper_figures_v2/E1_hybrid_win_tie_loss.png |
-| E2_paired_delta_paper_cost.png | D:/学习/FURP/VRP_project/TruckDrone_EVRPTW_NL/results/paper_figures_v2/E2_paired_delta_paper_cost.png |
-| F1_charging_policy_2x2.png | D:/学习/FURP/VRP_project/TruckDrone_EVRPTW_NL/results/paper_figures_v2/F1_charging_policy_2x2.png |
-| G1_alns_operator_effectiveness_bubble.png | D:/学习/FURP/VRP_project/TruckDrone_EVRPTW_NL/results/paper_figures_v2/G1_alns_operator_effectiveness_bubble.png |
-| H1_runtime_log_boxplot.png | D:/学习/FURP/VRP_project/TruckDrone_EVRPTW_NL/results/paper_figures_v2/H1_runtime_log_boxplot.png |
-| H2_runtime_ecdf.png | D:/学习/FURP/VRP_project/TruckDrone_EVRPTW_NL/results/paper_figures_v2/H2_runtime_ecdf.png |
-| I1_representative_hybrid_solution.png | D:/学习/FURP/VRP_project/TruckDrone_EVRPTW_NL/results/paper_figures_v2/I1_representative_hybrid_solution.png |
-
-## V2 Completion Audit
-
-| Item | Status | Reason |
+| Check | Status | Evidence |
 | --- | --- | --- |
-| Research focus explicit | PASS | Six RQs and focus are stated. |
-| Mathematical notation complete | PARTIAL | Conceptual model included; no fake MILP solver variables. |
-| Nonlinear charging explained | PASS | 2x2 charging and SOC-rate logic included. |
-| Final GA/ALNS/Hybrid clear | PASS | Final methods are separated from history. |
-| 108-run main experiment analyzed | PASS | Observed 108 rows. |
-| Negative results preserved | PASS | Hybrid non-dominance and runtime limits are stated. |
-| Figures answer RQs | PASS | Conceptual, heatmap, distribution, paired, operator, runtime, and route figures generated. |
-| No fabricated references | PASS | Unknown references marked [REFERENCE NEEDED]. |
-| Representative route from saved data | PASS | Representative route uses saved raw result: instance=RC101_25_seed128_td, method=hybrid_diverse_topk, policy=LFC, vehicle_count=8, drone_tasks=1. |
-| No solver rerun | PASS | Only read/audit/statistics/visualization/report generation performed. |
-
-
-
-## Deep Completion Audit
-
-| Item | Status | Reason |
-| --- | --- | --- |
-| Read docs development records | PASS | GA, ALNS, Hybrid, petal, modeling log, final audit, smoke audit, and stage6 report were mined. |
-| Do not rely only on final 108 runs | PASS | Developmental evidence matrix and supporting experiment narrative were added. |
-| Recover 5/10/25/50 evidence | PARTIAL | 5/10/25 evidence is recovered with numbers; 50-customer evidence remains stress/development only because no controlled final matrix is used. |
-| GA why/mechanism explained | PASS | GA representation, decoder, drone/charging, pruning, and diversity roles are argued causally. |
-| ALNS why/mechanism explained | PASS | ALNS state, operators, diagnostics, layered evaluation, and limitations are explained. |
-| Hybrid stage problem-hypothesis-result-next step | PASS | Naive, Top-K, preserve, periodic/stagnation, local, and diverse stages are reconstructed. |
-| Mathematical coupling expanded | PASS | Coverage, time, SOC, charging, synchronization, and coupling logic are expanded. |
-| Charging mathematical mechanism | PASS | Full/partial and linear/nonlinear mechanisms are connected to RQ4. |
-| Negative results expanded | PASS | Hybrid non-dominance, vehicle-distance conflict, operator weakness, runtime, and early repair dependence are discussed. |
-| No solver rerun or algorithm modification | PASS | Only docs/results analysis files were generated. |
-
+| development narrative enters Final Method | PASS | GA/ALNS/Hybrid final sections each include why each component exists. |
+| historical results enter RQ analysis | PASS | RQ2-RQ6 explicitly connect final numbers with development evidence. |
+| 108-run remains formal performance basis | PASS | Controlled final evidence is separated from developmental evidence. |
+| GA final behavior explained by GA history | PASS | Structured representation, decoder, drone/charging, and diversity are linked to failures. |
+| ALNS final behavior explained by operator/history | PASS | Operator families are linked to historical motivation and diagnostics. |
+| Hybrid final behavior connected to stages | PASS | Naive, Top-K, preserve, periodic/stagnation, local, diverse Top-K are connected to final W/T/L. |
+| charging connects model/history/final result | PASS | 2x2 policy model and final charging-time numbers are integrated. |
+| runtime connects development complexity | PASS | Runtime pathology and final outliers are discussed together. |
+| supporting experiments have numbers and roles | PASS | 5/10/25/50 roles include concrete development numbers where available. |
+| avoid overclaiming developmental evidence | PASS | Developmental evidence is repeatedly marked as non-controlled where appropriate. |
+| no second front-loaded deep section | PASS | Report starts with normal report sections and integrates deep material in place. |
